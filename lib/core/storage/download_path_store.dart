@@ -27,9 +27,9 @@ class DownloadPathStore {
 
   /// Resolve the download directory:
   /// 1. If a custom path is set and the directory still exists, use it.
-  /// 2. Otherwise use `<Downloads>/Foxel` (creating it if needed).
-  /// 3. If the downloads directory is unavailable, fall back to
-  ///    `<Documents>/Foxel`.
+  /// 2. Otherwise use the platform default (creating it if needed):
+  ///    - Android: /storage/emulated/0/Download/Foxel
+  ///    - Others: <Downloads>/Foxel, fallback <Documents>/Foxel
   Future<Directory> resolveDownloadDirectory() async {
     final customPath = await load();
     if (customPath != null && customPath.isNotEmpty) {
@@ -38,25 +38,19 @@ class DownloadPathStore {
         return dir;
       }
     }
-    final downloadsDir = await getDownloadsDirectory();
-    if (downloadsDir != null) {
-      final foxelDir = Directory('${downloadsDir.path}/Foxel');
-      if (!await foxelDir.exists()) {
-        await foxelDir.create(recursive: true);
-      }
-      return foxelDir;
+    final dir = Directory(await defaultDownloadPath());
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
     }
-    final docsDir = await getApplicationDocumentsDirectory();
-    final foxelDir = Directory('${docsDir.path}/Foxel');
-    if (!await foxelDir.exists()) {
-      await foxelDir.create(recursive: true);
-    }
-    return foxelDir;
+    return dir;
   }
 
   /// Return the default download path (without creating the directory).
   /// Used for display purposes in settings UI.
   Future<String> defaultDownloadPath() async {
+    if (Platform.isAndroid) {
+      return '/storage/emulated/0/Download/Foxel';
+    }
     final downloadsDir = await getDownloadsDirectory();
     if (downloadsDir != null) {
       return '${downloadsDir.path}/Foxel';
