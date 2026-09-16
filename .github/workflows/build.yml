@@ -35,16 +35,12 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
-            if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-              echo "ANDROID_KEYSTORE_BASE64 is not set. Pull request APK will use debug signing."
-              exit 0
-            fi
-            echo "ANDROID_KEYSTORE_BASE64 is not set."
-            exit 1
+            echo "ANDROID_KEYSTORE_BASE64 is not set. APK will use debug signing."
+            exit 0
           fi
           if [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
-            echo "Android signing secrets are incomplete."
-            exit 1
+            echo "Android signing secrets are incomplete. APK will use debug signing."
+            exit 0
           fi
 
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/foxel-release.jks
