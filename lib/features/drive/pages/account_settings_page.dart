@@ -1,6 +1,5 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'package:foxel/core/models/license_info.dart';
 import 'package:foxel/core/storage/download_path_store.dart';
@@ -45,12 +44,13 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
   }
 
   Future<void> _loadDownloadPaths() async {
-    final customPath = await _downloadPathStore.load();
-    final downloadsDir = await getDownloadsDirectory();
+    final store = DownloadPathStore();
+    final customPath = await store.load();
+    final defaultPath = await store.defaultDownloadPath();
     if (mounted) {
       setState(() {
         _customDownloadPath = customPath;
-        _defaultDownloadPath = downloadsDir?.path;
+        _defaultDownloadPath = defaultPath;
         _loadingDownloadPath = false;
       });
     }
