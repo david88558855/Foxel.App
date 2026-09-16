@@ -1,6 +1,9 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'package:foxel/core/models/license_info.dart';
+import 'package:foxel/core/storage/download_path_store.dart';
 import 'package:foxel/features/drive/pages/license_page.dart';
 
 class AccountSettingsPage extends StatefulWidget {
@@ -30,8 +33,56 @@ class AccountSettingsPage extends StatefulWidget {
 }
 
 class _AccountSettingsPageState extends State<AccountSettingsPage> {
+  final _downloadPathStore = DownloadPathStore();
+  String? _customDownloadPath;
+  String? _defaultDownloadPath;
+  bool _loadingDownloadPath = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDownloadPaths();
+  }
+
+  Future<void> _loadDownloadPaths() async {
+    final customPath = await _downloadPathStore.load();
+    final downloadsDir = await getDownloadsDirectory();
+    if (mounted) {
+      setState(() {
+        _customDownloadPath = customPath;
+        _defaultDownloadPath = downloadsDir?.path;
+        _loadingDownloadPath = false;
+      });
+    }
+  }
+
+  Future<void> _pickDownloadDirectory() async {
+    final result = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: '选择下载目录',
+    );
+    if (result == null || result.isEmpty) {
+      return;
+    }
+    await _downloadPathStore.save(result);
+    if (mounted) {
+      setState(() {
+        _customDownloadPath = result;
+      });
+    }
+  }
+
+  Future<void> _resetDownloadDirectory() async {
+    await _downloadPathStore.clear();
+    if (mounted) {
+      setState(() {
+        _customDownloadPath = null;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final downloadDisplayPath = _customDownloadPath ?? _defaultDownloadPath ?? '未知';
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FA),
       body: SafeArea(
@@ -73,6 +124,21 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                   subtitle: '清除本地登录凭证',
                   destructive: true,
                   onTap: () => _confirmLogout(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _SettingsGroup(
+              children: [
+                _DownloadPathRow(
+                  icon: Icons.folder_rounded,
+                  title: '下载目录',
+                  subtitle: _loadingDownloadPath
+                      ? '加载中...'
+                      : downloadDisplayPath,
+                  isCustom: _customDownloadPath != null,
+                  onTap: _pickDownloadDirectory,
+                  onReset: _resetDownloadDirectory,
                 ),
               ],
             ),
@@ -285,6 +351,52 @@ class _SettingsRow extends StatelessWidget {
       title: Text(title, style: TextStyle(color: destructive ? color : null)),
       subtitle: Text(subtitle),
       trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: onTap,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    );
+  }
+}
+
+class _DownloadPathRow extends StatelessWidget {
+  const _DownloadPathRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.isCustom,
+    required this.onTap,
+    required this.onReset,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool isCustom;
+  final VoidCallback onTap;
+  final VoidCallback onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, color: const Color(0xFF276EF1)),
+      title: Text(title),
+      subtitle: Text(
+        subtitle,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: isCustom
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, size: 20),
+                  tooltip: '恢复默认',
+                  onPressed: onReset,
+                ),
+                const Icon(Icons.chevron_right_rounded),
+              ],
+            )
+          : const Icon(Icons.chevron_right_rounded),
       onTap: onTap,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     );

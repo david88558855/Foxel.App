@@ -2,10 +2,10 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'package:foxel/core/api/foxel_api.dart';
 import 'package:foxel/core/models/file_entry.dart';
+import 'package:foxel/core/storage/download_path_store.dart';
 import 'package:foxel/features/drive/controllers/transfer_task_controller.dart';
 import 'package:foxel/features/media/pages/image_viewer_page.dart';
 import 'package:foxel/features/media/pages/video_player_page.dart';
@@ -255,9 +255,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       return;
     }
     try {
-      final dir =
-          await getDownloadsDirectory() ??
-          await getApplicationDocumentsDirectory();
+      final dir = await DownloadPathStore().resolveDownloadDirectory();
       if (!await dir.exists()) {
         await dir.create(recursive: true);
       }
