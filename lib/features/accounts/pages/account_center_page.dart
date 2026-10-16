@@ -52,6 +52,9 @@ class _AccountCenterPageState extends State<AccountCenterPage> {
   bool _editing = false;
   final Set<String> _selected = <String>{};
 
+  /// 删除进行中：禁用按钮，避免重复提交。
+  bool _deleting = false;
+
   void _enterEditMode() {
     setState(() {
       _editing = true;
@@ -91,15 +94,30 @@ class _AccountCenterPageState extends State<AccountCenterPage> {
       for (final account in selectable)
         if (_selected.contains(account.id)) account,
     ];
-    if (targets.isEmpty) {
+    if (targets.isEmpty || _deleting) {
       return;
     }
-    final removed = await widget.onRemoveAccounts(targets);
-    if (!mounted) {
-      return;
-    }
-    if (removed) {
+    setState(() => _deleting = true);
+    try {
+      final removed = await widget.onRemoveAccounts(targets);
+      if (!mounted) {
+        return;
+      }
+      if (!removed) {
+        return;
+      }
       _exitEditMode();
+      // 账户已清空且这是二级页：主动返回，避免停在无返回按钮的空态上。
+      if (widget.snapshot.value.accounts.isEmpty) {
+        final navigator = Navigator.of(context);
+        if (navigator.canPop()) {
+          navigator.pop();
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _deleting = false);
+      }
     }
   }
 
@@ -287,7 +305,7 @@ class _AccountCenterPageState extends State<AccountCenterPage> {
               centerTitle: true,
               actions: [
                 TextButton(
-                  onPressed: selectedAccounts.isEmpty
+                  onPressed: selectedAccounts.isEmpty || _deleting
                       ? null
                       : () => _deleteSelected(selectable),
                   child: Text(

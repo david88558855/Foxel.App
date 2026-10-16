@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:characters/characters.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -60,26 +62,54 @@ class DownloadDirStore {
     return saved != null && saved.trim().isNotEmpty;
   }
 
-  /// 目录名清洗：替换各平台非法字符、压缩空白、截断超长名称。
+  /// 文件夹名最大长度（含重名后缀）。
+  static const int maxFolderNameLength = 40;
+
+  /// Windows 保留设备名：用作目录名会创建失败。
+  static const _reservedNames = <String>{
+    'con', 'prn', 'aux', 'nul',
+    'com1', 'com2', 'com3', 'com4', 'com5', 'com6', 'com7', 'com8', 'com9',
+    'lpt1', 'lpt2', 'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9',
+  };
+
+  /// 目录名清洗：替换各平台非法字符、压缩空白、避开保留名、安全截断。
   static String sanitizeFolderName(String raw) {
     var name = raw.trim();
     if (name.isEmpty) {
       return '';
     }
-    // Windows / macOS / Linux 非法或易出问题的字符统一替换为下划线。
+    // 各平台非法或易出问题的字符统一替换为下划线。
     name = name.replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1F]'), '_');
     name = name.replaceAll(RegExp(r'\s+'), ' ');
-    name = name.replaceAll(RegExp(r'^[.\s]+|[.\s]+$'), '');
-    if (name.length > 40) {
-      name = name.substring(0, 40).trim();
+    name = _trimEdges(name);
+    if (name.isEmpty) {
+      return '';
+    }
+    // 按字素截断，避免切断代理对（emoji）产生非法字符串。
+    if (name.characters.length > maxFolderNameLength) {
+      name = _trimEdges(
+        name.characters.take(maxFolderNameLength).toString(),
+      );
+    }
+    if (name.isEmpty) {
+      return '';
+    }
+    // Windows 保留名（含 CON.txt 这类带扩展名的形式）加前缀规避。
+    final stem = name.split('.').first.toLowerCase();
+    if (_reservedNames.contains(stem)) {
+      name = 'foxel_$name';
     }
     return name;
+  }
+
+  static String _trimEdges(String value) {
+    return value.replaceAll(RegExp(r'^[.\s]+|[.\s]+$'), '');
   }
 
   /// 账户对应的文件夹名：**优先显示名称**，未填写时退回账户 ID。
   ///
   /// [disambiguator] 用于显示名称与既有账户重复时追加短标识，避免两个账户
-  /// 共用同一个下载目录。
+  /// 共用同一个下载目录；拼接后统一截断，防止路径过长。
   static String folderNameFor(Account account, {String? disambiguator}) {
     final name = sanitizeFolderName(account.alias);
     if (name.isEmpty) {
@@ -88,14 +118,29 @@ class DownloadDirStore {
     if (disambiguator == null || disambiguator.isEmpty) {
       return name;
     }
-    return '$name-$disambiguator';
+    final combined = '$name-$disambiguator';
+    if (combined.characters.length <= maxFolderNameLength) {
+      return combined;
+    }
+    final budget =
+        maxFolderNameLength - disambiguator.length - 1;
+    final head = budget > 0
+        ? name.characters.take(budget).toString()
+        : '';
+    return _trimEdges('$head-$disambiguator');
   }
 
-  /// 账户默认下载目录：`<平台默认>/Foxel/<显示名称 或 账户ID>`。
+  /// 账户默认下载目录。
+  ///
+  /// 开启「独立下载目录」时为 `<平台默认>/Foxel/<显示名称 或 账户ID>`；
+  /// 关闭时与其他关闭该开关的账户共用 `<平台默认>/Foxel`。
   static Future<String> defaultDirForAccount(
     Account account, {
     String? disambiguator,
   }) {
+    if (!account.isolatedDownloadDir) {
+      return _joinFoxel('');
+    }
     return _joinFoxel(folderNameFor(account, disambiguator: disambiguator));
   }
 

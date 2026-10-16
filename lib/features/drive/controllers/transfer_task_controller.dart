@@ -76,8 +76,13 @@ class TransferTaskController {
   int _nextId = 1;
   bool _disposed = false;
 
+  /// 已被主动中断（切账户/删账户）的任务 id。
+  /// 用于防止底层请求「抢跑成功」把状态又翻回「已完成」。
+  final Set<int> _interrupted = <int>{};
+
   void dispose() {
     _disposed = true;
+    _interrupted.clear();
     tasks.dispose();
   }
 
@@ -85,6 +90,11 @@ class TransferTaskController {
   void interruptAll(String reason) {
     if (_disposed) {
       return;
+    }
+    for (final task in tasks.value) {
+      if (task.status == TransferTaskStatus.running) {
+        _interrupted.add(task.id);
+      }
     }
     tasks.value = [
       for (final task in tasks.value)
@@ -180,6 +190,21 @@ class TransferTaskController {
     required String remotePath,
     required String localPath,
   }) {
+    if (_disposed) {
+      return TransferTask(
+        id: -1,
+        type: type,
+        name: name,
+        remotePath: remotePath,
+        localPath: localPath,
+        transferredBytes: 0,
+        totalBytes: null,
+        status: TransferTaskStatus.failed,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        errorMessage: '账户已移除',
+      );
+    }
     final now = DateTime.now();
     final task = TransferTask(
       id: _nextId++,
@@ -204,6 +229,10 @@ class TransferTaskController {
   }) async {
     try {
       await action();
+      // 已被切账户/删账户中断：保持「已中断」状态，不翻回成功。
+      if (_interrupted.remove(id)) {
+        return;
+      }
       _updateTask(
         id,
         (task) => task.copyWith(
@@ -214,6 +243,9 @@ class TransferTaskController {
       );
       onSuccess?.call();
     } catch (error) {
+      if (_interrupted.remove(id)) {
+        return;
+      }
       _updateTask(
         id,
         (task) => task.copyWith(

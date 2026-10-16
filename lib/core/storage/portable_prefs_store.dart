@@ -24,6 +24,12 @@ class PortablePrefsStore extends SharedPreferencesStorePlatform {
 
   Map<String, Object>? _cache;
 
+  /// 写队列：所有「改内存 → 落盘」串行执行。
+  ///
+  /// 否则并发写会争用同一个临时文件，最坏出现 tmp 被先移走、
+  /// 后一次 rename 失败并丢掉整个数据文件。
+  Future<void> _writeChain = Future<void>.value();
+
   Future<Map<String, Object>> _load() async {
     final cached = _cache;
     if (cached != null) {
@@ -50,52 +56,61 @@ class PortablePrefsStore extends SharedPreferencesStorePlatform {
     return map;
   }
 
-  /// 原子写：先写临时文件再替换，避免中途崩溃损坏数据。
-  Future<void> _persist() async {
+  /// 串行执行一次写操作；返回是否真正落盘成功。
+  Future<bool> _mutate(void Function(Map<String, Object> map) change) {
+    final result = _writeChain.then((_) async {
+      final map = await _load();
+      change(map);
+      return _persist();
+    });
+    // 队列自身不能因为某次失败而断裂。
+    _writeChain = result.then<void>((_) {}, onError: (_) {});
+    return result;
+  }
+
+  /// 原子写：先写临时文件，再替换目标；目标被占用时回退为覆盖写。
+  Future<bool> _persist() async {
     final map = _cache ?? <String, Object>{};
+    final tmp = File('${file.path}.tmp');
     try {
       final dir = file.parent;
       if (!await dir.exists()) {
         await dir.create(recursive: true);
       }
-      final tmp = File('${file.path}.tmp');
-      await tmp.writeAsString(jsonEncode(map), flush: true);
-      if (await file.exists()) {
-        await file.delete();
+      final raw = jsonEncode(map);
+      await tmp.writeAsString(raw, flush: true);
+      try {
+        if (await file.exists()) {
+          await file.delete();
+        }
+        await tmp.rename(file.path);
+      } catch (_) {
+        // Windows 上目标文件可能被杀软/其他实例短暂占用，降级为覆盖写。
+        await file.writeAsString(raw, flush: true);
+        if (await tmp.exists()) {
+          await tmp.delete();
+        }
       }
-      await tmp.rename(file.path);
+      return true;
     } catch (error) {
-      if (kDebugMode) {
-        debugPrint('[Foxel] 便携数据写入失败：$error');
-      }
+      // 不静默吞掉：返回 false 让上层知道这次写入没有落盘。
+      debugPrint('[Foxel] 便携数据写入失败：${error.runtimeType}');
+      return false;
     }
   }
 
   @override
-  Future<bool> clear() async {
-    _cache = <String, Object>{};
-    await _persist();
-    return true;
-  }
+  Future<bool> clear() => _mutate((map) => map.clear());
 
   @override
   Future<Map<String, Object>> getAll() => _load();
 
   @override
-  Future<bool> remove(String key) async {
-    final map = await _load();
-    map.remove(key);
-    await _persist();
-    return true;
-  }
+  Future<bool> remove(String key) => _mutate((map) => map.remove(key));
 
   @override
-  Future<bool> setValue(String valueType, String key, Object value) async {
-    final map = await _load();
-    map[key] = value;
-    await _persist();
-    return true;
-  }
+  Future<bool> setValue(String valueType, String key, Object value) =>
+      _mutate((map) => map[key] = value);
 }
 
 /// 便携版存储配置入口（幂等）。

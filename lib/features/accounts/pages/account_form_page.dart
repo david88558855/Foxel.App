@@ -386,8 +386,8 @@ class _AccountFormPageState extends State<AccountFormPage> {
     bool? rememberBrowseState,
     bool? isolatedCache,
   }) {
-    // 无论新建还是编辑，都用本地 draft 驱动渲染：
-    // 编辑页拿到的 widget.account 是 push 时的快照，直接依赖它开关不会更新。
+    // 只改本地 draft：隔离开关与其它字段一样，点「保存」时统一提交。
+    // （编辑态下即时保存会重建 API 与整棵页面树，导致列表闪烁与请求中断。）
     setState(() {
       _pendingIsolation = _AccountIsolationDraft(
         isolatedDownloadDir: isolatedDownloadDir ?? _isolatedDownloadDir,
@@ -396,18 +396,6 @@ class _AccountFormPageState extends State<AccountFormPage> {
         isolatedCache: isolatedCache ?? _isolatedCache,
       );
     });
-
-    final existing = widget.account;
-    if (existing == null) {
-      return;
-    }
-    final updated = existing.copyWith(
-      isolatedDownloadDir: _isolatedDownloadDir,
-      isolatedTasks: _isolatedTasks,
-      rememberBrowseState: _rememberBrowseState,
-      isolatedCache: _isolatedCache,
-    );
-    unawaited(widget.onSave(updated, switchAfterAdd: false));
   }
 
   Future<void> _confirmLogout(BuildContext context) async {

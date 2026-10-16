@@ -53,8 +53,42 @@ class AccountStore {
   /// 避免「删光账户后重启又被迁移出一个默认账户」。
   Future<List<Account>> loadAccounts({bool migrate = true}) async {
     final prefs = await SharedPreferences.getInstance();
+    final hasIndex = prefs.getString(_indexKey) != null;
+    final accounts = await _parseAccounts(prefs);
+
+    final migratedBefore = prefs.getBool(_migrationKey) ?? false;
+    if (accounts.isEmpty && migrate && !hasIndex && !migratedBefore) {
+      // 迁移整体走队列：并发首启时只有一个会真正迁移，不会生成两个「默认账户」。
+      return _serialized(() async {
+        final recheck = await _parseAccounts(prefs);
+        if (recheck.isNotEmpty) {
+          return recheck;
+        }
+        final migrated = _migrateLegacy(prefs);
+        // 无论是否迁移出账户，都打标记并清掉旧 key，杜绝二次迁移。
+        await prefs.setBool(_migrationKey, true);
+        await _purgeLegacyKeys(prefs);
+        if (migrated == null) {
+          return <Account>[];
+        }
+        await _upsertLocked(migrated);
+        await setActiveId(migrated.id);
+        return <Account>[migrated];
+      });
+    }
+
+    if (migrate && (hasIndex || migratedBefore)) {
+      // 已经进入多账户体系：幂等清理历史残留的旧版 key，
+      // 否则老设备上删光账户后仍会被旧 token 再次迁移出账户。
+      await _cleanupLegacyKeys(prefs, accounts);
+    }
+
+    return accounts;
+  }
+
+  /// 仅解析索引与 token，不做迁移/清理（迁移需要写操作，走队列）。
+  Future<List<Account>> _parseAccounts(SharedPreferences prefs) async {
     final raw = prefs.getString(_indexKey);
-    final hasIndex = raw != null;
     final accounts = <Account>[];
 
     if (raw != null && raw.isNotEmpty) {
@@ -87,23 +121,6 @@ class AccountStore {
           }
         }
       }
-    }
-
-    final migratedBefore = prefs.getBool(_migrationKey) ?? false;
-    if (accounts.isEmpty && migrate && !hasIndex && !migratedBefore) {
-      final migrated = _migrateLegacy(prefs);
-      // 无论是否迁移出账户，都打标记并清掉旧 key，杜绝二次迁移。
-      await prefs.setBool(_migrationKey, true);
-      await _purgeLegacyKeys(prefs);
-      if (migrated != null) {
-        await upsert(migrated);
-        await setActiveId(migrated.id);
-        return <Account>[migrated];
-      }
-    } else if (migrate && (hasIndex || migratedBefore)) {
-      // 已经进入多账户体系：幂等清理历史残留的旧版 key，
-      // 否则老设备上删光账户后仍会被旧 token 再次迁移出账户。
-      await _cleanupLegacyKeys(prefs, accounts);
     }
 
     return accounts;
@@ -298,10 +315,18 @@ class AccountStore {
   }
 
   /// 批量移除账户（多选删除）。
-  Future<void> removeAll(Iterable<String> ids) => _serialized(() async {
+  ///
+  /// 单个失败不影响其余账户，出错 id 通过返回值告知调用方。
+  Future<List<String>> removeAll(Iterable<String> ids) => _serialized(() async {
+    final failed = <String>[];
     for (final id in ids) {
-      await _removeLocked(id);
+      try {
+        await _removeLocked(id);
+      } catch (_) {
+        failed.add(id);
+      }
     }
+    return failed;
   });
 
   /// 清除账户的本地缓存与状态，但保留账户与登录态。

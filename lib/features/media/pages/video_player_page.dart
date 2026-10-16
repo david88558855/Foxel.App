@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -134,10 +135,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       _scheduleControlsHide();
     } catch (error, stackTrace) {
       _log('initialize failed: $error');
-      debugPrintStack(
-        label: '[VideoPlayer] initialize stack',
-        stackTrace: stackTrace,
-      );
+      if (kDebugMode) {
+        debugPrintStack(
+          label: '[VideoPlayer] initialize stack',
+          stackTrace: stackTrace,
+        );
+      }
       rethrow;
     }
   }
@@ -338,7 +341,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   }
 
   void _log(String message) {
-    debugPrint('[VideoPlayer] $message');
+    if (kDebugMode) {
+      debugPrint('[VideoPlayer] $message');
+    }
   }
 
   void _startPositionTimer() {

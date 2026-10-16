@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:foxel/core/api/foxel_api.dart';
 import 'package:foxel/core/models/account.dart';
 import 'package:foxel/core/models/accounts_snapshot.dart';
+import 'package:foxel/core/models/isolation_policy.dart';
 import 'package:foxel/core/models/session.dart';
 import 'package:foxel/core/theme/design_tokens.dart';
 import 'package:foxel/core/storage/portable_prefs_store.dart';
@@ -41,6 +42,9 @@ class _AppRootState extends State<AppRoot> {
   FoxelApi? _api;
   bool _loading = true;
   bool _switching = false;
+
+  /// 账户删除进行中：与切换账户互斥，避免并发写索引。
+  bool _removingAccounts = false;
   String _lastBaseUrl = '';
 
   @override
@@ -131,6 +135,8 @@ class _AppRootState extends State<AppRoot> {
 
   /// 推送最新账户状态（账户管理页订阅此通知）。
   void _publishAccounts() {
+    // 让底层存储（播放进度等）也遵循当前账户的隔离策略。
+    IsolationPolicy.cacheIsolated = _active?.isolatedCache ?? true;
     _snapshot.value = AccountsSnapshot(
       accounts: List<Account>.unmodifiable(_accounts),
       activeId: _active?.id,
@@ -140,7 +146,8 @@ class _AppRootState extends State<AppRoot> {
 
   /// 切换到目标账户：校验 → 中断旧账户任务 → 换指针 → 重建界面。
   Future<void> _switchTo(String accountId) async {
-    if (_switching) {
+    // 删除账户进行中禁止切换：否则会把正在被删的账户又 upsert 回索引。
+    if (_switching || _removingAccounts) {
       return;
     }
     final current = _active;
@@ -175,7 +182,10 @@ class _AppRootState extends State<AppRoot> {
     }
 
     if (current != null) {
-      _taskControllers[current.id]?.interruptAll('已因切换账户中断');
+      // 「独立传输队列」关闭时允许任务跨账户继续跑。
+      if (current.isolatedTasks) {
+        _taskControllers[current.id]?.interruptAll('已因切换账户中断');
+      }
     }
 
     await _store.upsert(verified);
@@ -449,7 +459,7 @@ class _AppRootState extends State<AppRoot> {
   /// 删除当前账户时立即退出其登录态：切到剩余账户，没有则回到空态，
   /// 校验放到后台进行，避免界面停留在已删除的账户上。
   Future<bool> _confirmRemoveAccounts(List<Account> accounts) async {
-    if (accounts.isEmpty) {
+    if (accounts.isEmpty || _removingAccounts) {
       return false;
     }
     final isBatch = accounts.length > 1;
@@ -489,11 +499,21 @@ class _AppRootState extends State<AppRoot> {
       return false;
     }
 
+    // 删除期间与切换账户互斥，避免把正在删除的账户又写回索引。
+    _removingAccounts = true;
+    try {
+      return await _removeAccountsInternal(accounts);
+    } finally {
+      _removingAccounts = false;
+    }
+  }
+
+  Future<bool> _removeAccountsInternal(List<Account> accounts) async {
     final ids = accounts.map((item) => item.id).toList();
     final removingActive = ids.contains(_active?.id);
 
     // 1) 清除存储中的账户与其沙箱数据（串行执行，避免索引互相覆盖）
-    await _store.removeAll(ids);
+    final failed = await _store.removeAll(ids);
     // 2) 释放这些账户的传输任务
     for (final id in ids) {
       _taskControllers.remove(id)?.dispose();
@@ -504,7 +524,11 @@ class _AppRootState extends State<AppRoot> {
       return true;
     }
 
-    final summary = isBatch ? '已删除 ${accounts.length} 个账户' : '已移除$names';
+    final removedCount = accounts.length - failed.length;
+    final summary = <String>[
+      isBatch ? '已删除 $removedCount 个账户' : '已移除$names',
+      if (failed.isNotEmpty) '（${failed.length} 个失败，请重试）',
+    ].join();
 
     if (!removingActive) {
       setState(() {});

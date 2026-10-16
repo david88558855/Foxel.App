@@ -158,6 +158,10 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   Future<void> _runAction(Future<void> Function() action) async {
     try {
       await action();
+      // 操作期间可能已切账户（State 被 ValueKey 替换并 dispose）。
+      if (!mounted) {
+        return;
+      }
       _refresh();
     } catch (error) {
       if (mounted) {
@@ -199,6 +203,10 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   }
 
   Future<void> _createFolder() async {
+    // 操作可能由切换账户前的弹层触发，State 已被替换。
+    if (!mounted) {
+      return;
+    }
     final name = await _askText(title: '新建文件夹', label: '文件夹名称');
     if (name == null || name.trim().isEmpty) {
       return;
@@ -207,6 +215,10 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   }
 
   Future<void> _uploadFile() async {
+    // 操作可能由切换账户前的弹层触发，State 已被替换。
+    if (!mounted) {
+      return;
+    }
     final result = await FilePicker.platform.pickFiles(withData: false);
     final file = result?.files.single;
     final localPath = file?.path;
@@ -229,6 +241,10 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   }
 
   Future<void> _renameEntry(FileEntry entry) async {
+    // 操作可能由切换账户前的弹层触发，State 已被替换。
+    if (!mounted) {
+      return;
+    }
     final newName = await _askText(
       title: '重命名',
       label: '新名称',
@@ -243,6 +259,10 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   }
 
   Future<void> _copyEntry(FileEntry entry) async {
+    // 操作可能由切换账户前的弹层触发，State 已被替换。
+    if (!mounted) {
+      return;
+    }
     final target = await _askText(
       title: '复制到',
       label: '目标完整路径',
@@ -260,6 +280,10 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   }
 
   Future<void> _moveEntry(FileEntry entry) async {
+    // 操作可能由切换账户前的弹层触发，State 已被替换。
+    if (!mounted) {
+      return;
+    }
     final target = await _askText(
       title: '移动到',
       label: '目标完整路径',
@@ -277,6 +301,10 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   }
 
   Future<void> _deleteEntry(FileEntry entry) async {
+    // 操作可能由切换账户前的弹层触发，State 已被替换。
+    if (!mounted) {
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -305,6 +333,10 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   }
 
   Future<void> _downloadEntry(FileEntry entry) async {
+    // 操作可能由切换账户前的弹层触发，State 已被替换。
+    if (!mounted) {
+      return;
+    }
     if (entry.isDir) {
       _showMessage('暂不支持下载文件夹');
       return;
@@ -358,6 +390,10 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   }
 
   void _openEntry(FileEntry entry) {
+    // 操作可能由切换账户前的弹层触发，State 已被替换。
+    if (!mounted) {
+      return;
+    }
     final fullPath = FoxelApi.joinPath(_path, entry.name);
     if (entry.isDir) {
       _openPath(fullPath);

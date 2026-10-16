@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:foxel/core/models/isolation_policy.dart';
 
 /// 视频播放进度，按账户沙箱存储（随账户一起清理）。
 class VideoPlaybackStore {
@@ -34,7 +35,9 @@ class VideoPlaybackStore {
   }
 
   String _key(String accountId, String path) {
-    return '$_prefix$accountId$_midfix${_fnv1a64(utf8.encode(path))}';
+    // 「独立媒体缓存」关闭时改用共享分区。
+    final scope = IsolationPolicy.cacheScope(accountId);
+    return '$_prefix$scope$_midfix${_fnv1a64(utf8.encode(path))}';
   }
 
   String _fnv1a64(List<int> bytes) {
