@@ -173,13 +173,15 @@ flutter build windows --release         # Windows
 | `analyze.yml` | `flutter analyze` + `flutter test`（含账户管理页组件测试） |
 | `build.yml` | 全平台安装包；推送 `v*` 标签时自动发布到 GitHub Release |
 
-**发布产物（按架构选择）**
+**发布产物（按架构选择，点击格式即可下载最新版）**
 
 | 架构 | Windows | macOS | Linux | Android | iOS |
 |---|---|---|---|---|---|
-| x86-64 (64 位) | `Foxel-windows-x86_64.zip` | — | `Foxel-linux-x86_64.tar.gz` | `Foxel-android-x86_64.apk` | — |
-| AArch64 / ARM64 | — | `Foxel-macos-arm64.zip` | — | `Foxel-android-arm64-v8a.apk` | `Foxel-ios-arm64-unsigned.ipa` |
-| ARMv7 (32 位) | — | — | — | `Foxel-android-armeabi-v7a.apk` | — |
+| x86-64 (64 位) | [ZIP](https://github.com/david88558855/Foxel.App-2/releases/latest/download/Foxel-windows-x86_64.zip) | — | [TAR.GZ](https://github.com/david88558855/Foxel.App-2/releases/latest/download/Foxel-linux-x86_64.tar.gz) | [APK](https://github.com/david88558855/Foxel.App-2/releases/latest/download/Foxel-android-x86_64.apk) | — |
+| AArch64 / ARM64 | — | [ZIP](https://github.com/david88558855/Foxel.App-2/releases/latest/download/Foxel-macos-arm64.zip) | — | [APK](https://github.com/david88558855/Foxel.App-2/releases/latest/download/Foxel-android-arm64-v8a.apk) | [IPA](https://github.com/david88558855/Foxel.App-2/releases/latest/download/Foxel-ios-arm64-unsigned.ipa) |
+| ARMv7 (32 位) | — | — | — | [APK](https://github.com/david88558855/Foxel.App-2/releases/latest/download/Foxel-android-armeabi-v7a.apk) | — |
+
+> 也可以到 [Releases](https://github.com/david88558855/Foxel.App-2/releases) 页面按版本下载。
 
 **安装说明**
 

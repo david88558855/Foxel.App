@@ -231,11 +231,19 @@ jobs:
       - name: List release assets
         run: ls -lh dist
 
+      # 说明里的下载链接需要带上当前 tag，渲染后再作为 body 使用
+      - name: Render release notes
+        run: |
+          sed -e "s|__REPO__|${{ github.repository }}|g" \
+              -e "s|__TAG__|${{ github.ref_name }}|g" \
+              .github/release_notes.md > release_notes_rendered.md
+          head -8 release_notes_rendered.md
+
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
           name: Foxel ${{ github.ref_name }}
-          body_path: .github/release_notes.md
+          body_path: release_notes_rendered.md
           files: dist/*
           draft: false
           prerelease: false
