@@ -128,8 +128,9 @@ class _AccountCenterPageState extends State<AccountCenterPage> {
           );
         }
 
-        // 当前账户不可删除，多选只针对其他账户。
-        final selectable = snapshot.others;
+        // 多选时所有账户都可勾选（包括当前账户）：删掉当前账户后会自动
+        // 切到剩余账户，一个不剩则回到空态。
+        final selectable = snapshot.accounts;
         final selectedAccounts = <Account>[
           for (final account in selectable)
             if (_selected.contains(account.id)) account,
@@ -143,45 +144,23 @@ class _AccountCenterPageState extends State<AccountCenterPage> {
             32,
           ),
           children: [
-            _CurrentAccountCard(
-              account: active,
-              runningTasks: snapshot.runningTaskCounts[active.id] ?? 0,
-              editing: _editing,
-              onEdit: () => widget.onEditAccount(active),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            Text(
-              selectable.isEmpty
-                  ? '其他账户'
-                  : _editing
-                  ? '勾选要删除的账户 (${selectable.length})'
-                  : '其他账户 · 点选即切换 (${selectable.length})',
-              style: AppText.sectionLabel,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            if (selectable.isEmpty)
-              const _EmptyHint(text: '还没有其他账户，添加后可在这里切换')
-            else
+            if (_editing) ...[
               _Group(
                 children: [
                   for (final account in selectable)
                     _AccountTile(
                       account: account,
+                      isActive: account.id == active.id,
                       runningTasks:
                           snapshot.runningTaskCounts[account.id] ?? 0,
-                      editing: _editing,
+                      editing: true,
                       selected: _selected.contains(account.id),
-                      onTap: () => _editing
-                          ? _toggle(account)
-                          : _handleSwitch(account),
-                      onEdit: () => widget.onEditAccount(account),
-                      onRemove: () => widget.onRemoveAccounts(<Account>[
-                        account,
-                      ]),
+                      onTap: () => _toggle(account),
+                      onEdit: () {},
+                      onRemove: () {},
                     ),
                 ],
               ),
-            if (_editing && selectable.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.md),
               InkWell(
                 onTap: () => _toggleAll(selectable),
@@ -194,9 +173,10 @@ class _AccountCenterPageState extends State<AccountCenterPage> {
                   child: Row(
                     children: [
                       _CheckBox(
-                        checked: selectable.every(
-                          (account) => _selected.contains(account.id),
-                        ),
+                        checked: selectable.isNotEmpty &&
+                            selectable.every(
+                              (account) => _selected.contains(account.id),
+                            ),
                       ),
                       const SizedBox(width: AppSpacing.sm),
                       const Text(
@@ -210,7 +190,7 @@ class _AccountCenterPageState extends State<AccountCenterPage> {
                       const SizedBox(width: AppSpacing.sm),
                       const Expanded(
                         child: Text(
-                          '当前账户不会被删除',
+                          '含当前账户；删除后自动切换或回到空态',
                           style: AppText.itemHint,
                         ),
                       ),
@@ -218,6 +198,41 @@ class _AccountCenterPageState extends State<AccountCenterPage> {
                   ),
                 ),
               ),
+            ] else ...[
+              _CurrentAccountCard(
+                account: active,
+                runningTasks: snapshot.runningTaskCounts[active.id] ?? 0,
+                onEdit: () => widget.onEditAccount(active),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              Text(
+                snapshot.others.isEmpty
+                    ? '其他账户'
+                    : '其他账户 · 点选即切换 (${snapshot.others.length})',
+                style: AppText.sectionLabel,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              if (snapshot.others.isEmpty)
+                const _EmptyHint(text: '还没有其他账户，添加后可在这里切换')
+              else
+                _Group(
+                  children: [
+                    for (final account in snapshot.others)
+                      _AccountTile(
+                        account: account,
+                        isActive: false,
+                        runningTasks:
+                            snapshot.runningTaskCounts[account.id] ?? 0,
+                        editing: false,
+                        selected: false,
+                        onTap: () => _handleSwitch(account),
+                        onEdit: () => widget.onEditAccount(account),
+                        onRemove: () => widget.onRemoveAccounts(<Account>[
+                          account,
+                        ]),
+                      ),
+                  ],
+                ),
             ],
             if (!_editing) ...[
               const SizedBox(height: AppSpacing.lg),
@@ -429,13 +444,11 @@ class _CurrentAccountCard extends StatelessWidget {
   const _CurrentAccountCard({
     required this.account,
     required this.runningTasks,
-    required this.editing,
     required this.onEdit,
   });
 
   final Account account;
   final int runningTasks;
-  final bool editing;
   final VoidCallback onEdit;
 
   @override
@@ -519,27 +532,24 @@ class _CurrentAccountCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          if (editing)
-            const Text('多选模式：当前账户不会被删除', style: AppText.itemHint)
-          else
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: onEdit,
-                icon: const Icon(Icons.tune_rounded, size: 18),
-                label: const Text('编辑账户信息'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.ink,
-                  side: const BorderSide(color: AppColors.border),
-                  padding: const EdgeInsets.symmetric(
-                    vertical: AppSpacing.md,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadii.tile),
-                  ),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onEdit,
+              icon: const Icon(Icons.tune_rounded, size: 18),
+              label: const Text('编辑账户信息'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.ink,
+                side: const BorderSide(color: AppColors.border),
+                padding: const EdgeInsets.symmetric(
+                  vertical: AppSpacing.md,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadii.tile),
                 ),
               ),
             ),
+          ),
         ],
       ),
     );
@@ -591,6 +601,7 @@ class _StatChip extends StatelessWidget {
 class _AccountTile extends StatelessWidget {
   const _AccountTile({
     required this.account,
+    required this.isActive,
     required this.runningTasks,
     required this.editing,
     required this.selected,
@@ -600,6 +611,9 @@ class _AccountTile extends StatelessWidget {
   });
 
   final Account account;
+
+  /// 是否是当前账户（多选时也允许勾选，仅做标记）。
+  final bool isActive;
   final int runningTasks;
   final bool editing;
   final bool selected;
@@ -624,11 +638,31 @@ class _AccountTile extends StatelessWidget {
           AccountAvatar(account: account, size: 40, radius: AppRadii.avatar),
         ],
       ),
-      title: Text(
-        account.displayName,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: AppText.itemTitle,
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              account.displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.itemTitle,
+            ),
+          ),
+          if (isActive) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: AppDecorations.pill(Color(account.colorValue)),
+              child: Text(
+                '使用中',
+                style: AppText.pill.copyWith(
+                  fontSize: 10,
+                  color: Color(account.colorValue),
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
       subtitle: Text(
         '${account.hostLabel} · ${formatLastUsed(account.lastUsedAt)}',
