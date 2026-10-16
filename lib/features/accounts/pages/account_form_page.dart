@@ -701,24 +701,24 @@ class _IsolationSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE7ECF2)),
-      ),
-      child: SwitchListTile.adaptive(
-        value: value,
-        onChanged: onChanged,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14),
-        title: Text(
-          title,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+    // 用 Material 承载 SwitchListTile，避免点击反馈被背景色容器遮挡。
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Material(
+        color: AppColors.surface,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadii.tile),
+          side: const BorderSide(color: AppColors.border),
         ),
-        subtitle: Text(
-          subtitle,
-          style: const TextStyle(fontSize: 11.5, color: Color(0xFF93A0AF)),
+        child: SwitchListTile.adaptive(
+          value: value,
+          onChanged: onChanged,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+          ),
+          title: Text(title, style: AppText.itemTitle.copyWith(fontSize: 14)),
+          subtitle: Text(subtitle, style: AppText.itemHint),
         ),
       ),
     );

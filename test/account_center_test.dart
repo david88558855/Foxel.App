@@ -123,7 +123,8 @@ void main() {
     await tester.pumpWidget(_wrap(snapshot, onRemove: (_) async => true));
     await tester.pumpAndSettle();
 
-    expect(find.text('还没有账户'), findsNWidgets(2));
+    // 非根形态（从设置页进入）空态只显示一个主标题
+    expect(find.text('还没有账户'), findsOneWidget);
     expect(find.text('添加账户'), findsOneWidget);
     expect(find.text('扫码添加'), findsOneWidget);
     expect(find.text('编辑'), findsNothing);

@@ -440,6 +440,7 @@ class _CurrentAccountCard extends StatelessWidget {
   }
 }
 
+/// 分组卡片：用 [Material] 承载 ListTile，保证点击水波纹可见。
 class _Group extends StatelessWidget {
   const _Group({required this.children});
 
@@ -447,8 +448,13 @@ class _Group extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: AppDecorations.group(),
+    return Material(
+      color: AppColors.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadii.card),
+        side: const BorderSide(color: AppColors.border),
+      ),
       child: Column(children: children),
     );
   }

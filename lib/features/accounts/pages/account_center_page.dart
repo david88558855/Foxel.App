@@ -746,6 +746,10 @@ class _Tag extends StatelessWidget {
   }
 }
 
+/// 分组卡片。
+///
+/// 必须用 [Material] 而不是带背景色的 Container：ListTile 的背景与水波纹画在
+/// 最近的 Material 上，若被 DecoratedBox 覆盖会出现「点击无反馈」。
 class _Group extends StatelessWidget {
   const _Group({required this.children});
 
@@ -753,8 +757,13 @@ class _Group extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: AppDecorations.group(),
+    return Material(
+      color: AppColors.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadii.card),
+        side: const BorderSide(color: AppColors.border),
+      ),
       child: Column(children: children),
     );
   }
