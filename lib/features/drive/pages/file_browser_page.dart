@@ -10,6 +10,7 @@ import 'package:foxel/core/models/account.dart';
 import 'package:foxel/core/models/file_entry.dart';
 import 'package:foxel/core/storage/browse_state_store.dart';
 import 'package:foxel/core/storage/download_dir_store.dart';
+import 'package:foxel/core/theme/design_tokens.dart';
 import 'package:foxel/features/accounts/widgets/account_avatar.dart';
 import 'package:foxel/features/drive/controllers/transfer_task_controller.dart';
 import 'package:foxel/features/media/pages/image_viewer_page.dart';
@@ -1880,16 +1881,12 @@ class _AccountBar extends StatelessWidget {
                   vertical: 3,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(99),
+                  color: AppColors.warn.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppRadii.pill),
                 ),
-                child: const Text(
+                child: Text(
                   '需重新验证',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFFF59E0B),
-                  ),
+                  style: AppText.pill.copyWith(color: AppColors.warn),
                 ),
               )
             else

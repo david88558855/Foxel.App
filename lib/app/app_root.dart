@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:foxel/core/api/foxel_api.dart';
@@ -365,7 +367,11 @@ class _AppRootState extends State<AppRoot> {
     );
   }
 
-  Future<void> _confirmRemove(Account account) async {
+  /// 移除账户；返回 true 表示已删除。
+  ///
+  /// 删除当前账户时立即退出其登录态：切到剩余的账户，没有则回到空态，
+  /// 校验放到后台进行，避免界面停留在已删除的账户上。
+  Future<bool> _confirmRemove(Account account) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -389,44 +395,82 @@ class _AppRootState extends State<AppRoot> {
       },
     );
     if (confirmed != true) {
-      return;
+      return false;
     }
 
+    final wasActive = _active?.id == account.id;
+
+    // 1) 清除存储中的账户与其沙箱数据
     await _store.remove(account.id);
+    // 2) 释放该账户的传输任务
     _taskControllers.remove(account.id)?.dispose();
     await _reload();
 
     if (!mounted) {
+      return true;
+    }
+
+    if (!wasActive) {
+      setState(() {});
+      _showMessage('已移除「${account.displayName}」');
+      return true;
+    }
+
+    // 3) 删除的是当前账户：立刻离开其登录态
+    _api?.close();
+    final next = await _store.activeAccount();
+    setState(() {
+      _active = next;
+      _api = next == null
+          ? null
+          : FoxelApi(baseUrl: next.baseUrl, token: next.token);
+    });
+
+    if (next == null) {
+      _showMessage('已移除「${account.displayName}」');
+      return true;
+    }
+
+    _showMessage('已移除「${account.displayName}」，已切换到「${next.displayName}」');
+    unawaited(_validateActive());
+    return true;
+  }
+
+  /// 后台校验当前账户，失败则标记为失效（不阻塞界面切换）。
+  Future<void> _validateActive() async {
+    final current = _active;
+    if (current == null) {
       return;
     }
-    if (_active?.id == account.id) {
-      _api?.close();
-      final next = await _store.activeAccount();
-      if (next == null) {
-        setState(() {
-          _active = null;
-          _api = null;
-        });
-        return;
-      }
-      final verified = await _verify(next);
-      final resolved = verified ?? next.copyWith(isStale: true);
-      if (verified != null) {
-        await _store.upsert(verified);
-      }
-      await _store.setActiveId(resolved.id);
+    final verified = await _verify(current);
+    if (!mounted) {
+      return;
+    }
+    if (verified != null) {
+      await _store.upsert(verified);
       await _reload();
       if (!mounted) {
         return;
       }
       setState(() {
-        _active = resolved;
-        _api = FoxelApi(baseUrl: resolved.baseUrl, token: resolved.token);
+        if (_active?.id == verified.id) {
+          _active = verified;
+          _api?.close();
+          _api = FoxelApi(baseUrl: verified.baseUrl, token: verified.token);
+        }
       });
-    } else {
-      setState(() {});
+      return;
     }
-    _showMessage('已移除「${account.displayName}」');
+    await _store.markStale(current.id, stale: true);
+    await _reload();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      if (_active?.id == current.id) {
+        _active = _active?.copyWith(isStale: true);
+      }
+    });
   }
 
   Future<void> _confirmClearLocalData(Account account) async {
@@ -488,7 +532,7 @@ class _AppRootState extends State<AppRoot> {
         onAddManually: _openManualAdd,
         onAddByQr: _openQrAdd,
         onEditAccount: (_) {},
-        onRemoveAccount: (_) {},
+        onRemoveAccount: (_) async => false,
         asRoot: true,
       );
     }

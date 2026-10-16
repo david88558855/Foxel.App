@@ -126,6 +126,37 @@ class DownloadDirStore {
     return dir;
   }
 
+  /// 统计账户下载目录已占用的字节数（不存在时返回 0）。
+  static Future<int> dirSizeBytes(String accountId) async {
+    if (kIsWeb) {
+      return 0;
+    }
+    final path = await currentDirFor(accountId);
+    if (path.isEmpty) {
+      return 0;
+    }
+    final dir = Directory(path);
+    if (!await dir.exists()) {
+      return 0;
+    }
+    var total = 0;
+    try {
+      await for (final entity
+          in dir.list(recursive: true, followLinks: false)) {
+        if (entity is File) {
+          try {
+            total += await entity.length();
+          } catch (_) {
+            // 单个文件读取失败时跳过。
+          }
+        }
+      }
+    } catch (_) {
+      return total;
+    }
+    return total;
+  }
+
   /// 通过写入探测文件检查目录是否可写。
   static Future<bool> isWritable(String path) async {
     try {

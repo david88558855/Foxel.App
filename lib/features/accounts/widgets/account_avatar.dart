@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:foxel/core/models/account.dart';
+import 'package:foxel/core/theme/design_tokens.dart';
 
 /// 账户头像：优先使用服务器头像，缺失时用账户主题色 + 首字母。
 class AccountAvatar extends StatelessWidget {
@@ -8,11 +9,13 @@ class AccountAvatar extends StatelessWidget {
     super.key,
     required this.account,
     this.size = 44,
-    this.radius = 14,
+    this.radius = AppRadii.avatar,
     this.fontSize,
   });
 
   final Account account;
+
+  /// 边长：设计稿规范为 60 / 44 / 40 / 38 / 28。
   final double size;
   final double radius;
   final double? fontSize;

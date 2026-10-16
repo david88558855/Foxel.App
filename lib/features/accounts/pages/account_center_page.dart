@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:foxel/core/models/account.dart';
+import 'package:foxel/core/theme/design_tokens.dart';
 import 'package:foxel/features/accounts/widgets/account_avatar.dart';
 
 /// 账户管理页。
@@ -36,7 +37,9 @@ class AccountCenterPage extends StatelessWidget {
   final VoidCallback onAddManually;
   final VoidCallback onAddByQr;
   final ValueChanged<Account> onEditAccount;
-  final ValueChanged<Account> onRemoveAccount;
+
+  /// 移除账户；返回 true 表示已删除（页面据此返回上级）。
+  final Future<bool> Function(Account account) onRemoveAccount;
 
   /// 无账户启动时以根页面形态呈现。
   final bool asRoot;
@@ -68,18 +71,24 @@ class AccountCenterPage extends StatelessWidget {
     ];
 
     final body = ListView(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 32),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.page,
+        6,
+        AppSpacing.page,
+        32,
+      ),
       children: [
         _CurrentAccountCard(
           account: active,
           runningTasks: runningTaskCounts[active.id] ?? 0,
           onEdit: () => onEditAccount(active),
         ),
-        const SizedBox(height: 16),
-        _SectionLabel(
-          text: others.isEmpty ? '其他账户' : '其他账户 · 点选即切换 (${others.length})',
+        const SizedBox(height: AppSpacing.xl),
+        Text(
+          others.isEmpty ? '其他账户' : '其他账户 · 点选即切换 (${others.length})',
+          style: AppText.sectionLabel,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         if (others.isEmpty)
           const _EmptyHint(text: '还没有其他账户，添加后可在这里切换')
         else
@@ -91,40 +100,39 @@ class AccountCenterPage extends StatelessWidget {
                   runningTasks: runningTaskCounts[account.id] ?? 0,
                   onTap: () => _handleSwitch(context, account),
                   onEdit: () => onEditAccount(account),
-                  onRemove: () => onRemoveAccount(account),
+                  onRemove: () => _handleRemove(context, account),
                 ),
             ],
           ),
-        const SizedBox(height: 14),
+        const SizedBox(height: AppSpacing.lg),
         OutlinedButton.icon(
           onPressed: onAddAccount,
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('添加账户'),
+          icon: const Icon(Icons.add_rounded, size: 18),
+          label: const Text('添加账户', style: AppText.button),
         ),
         const SizedBox(height: 10),
         const Text(
           '点选账户即切换；切换后本账户的下载目录、任务与缓存与其他账户互相隔离。',
-          style: TextStyle(
-            fontSize: 11.5,
-            color: Color(0xFF93A0AF),
-            fontWeight: FontWeight.w600,
-          ),
+          style: AppText.itemHint,
         ),
       ],
     );
 
     if (asRoot) {
       return Scaffold(
-        backgroundColor: const Color(0xFFF4F7FA),
+        backgroundColor: AppColors.background,
         body: SafeArea(child: body),
       );
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FA),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('账户管理'),
-        backgroundColor: const Color(0xFFF4F7FA),
+        backgroundColor: AppColors.background,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        titleTextStyle: AppText.pageTitle.copyWith(fontSize: 17),
         actions: [
           IconButton(
             onPressed: onAddAccount,
@@ -140,6 +148,17 @@ class AccountCenterPage extends StatelessWidget {
   Future<void> _handleSwitch(BuildContext context, Account account) async {
     final ok = await onSwitchAccount(account);
     if (!ok || !context.mounted) {
+      return;
+    }
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
+  }
+
+  Future<void> _handleRemove(BuildContext context, Account account) async {
+    final removed = await onRemoveAccount(account);
+    if (!removed || !context.mounted) {
       return;
     }
     final navigator = Navigator.of(context);
@@ -163,99 +182,114 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final content = Column(
-      children: [
-        if (asRoot) ...[
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              '账户',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
-            ),
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.page,
+            AppSpacing.lg,
+            AppSpacing.page,
+            24,
           ),
-          const SizedBox(height: 2),
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              '还没有账户',
-              style: TextStyle(
-                fontSize: 12,
-                color: Color(0xFF93A0AF),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-        Expanded(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 40),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 76,
-                    height: 76,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEAF0FF),
-                      borderRadius: BorderRadius.circular(26),
-                    ),
-                    child: const Icon(
-                      Icons.person_outline_rounded,
-                      size: 34,
-                      color: Color(0xFF4C6FFF),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  const Text(
-                    '还没有账户',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '添加第一个 Foxel 服务器\n即可开始管理文件',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: Color(0xFF93A0AF),
-                      height: 1.7,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: 230,
+          child: Column(
+            children: [
+              if (asRoot) ...[
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('账户', style: AppText.pageTitle),
+                ),
+                const SizedBox(height: 2),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('还没有账户', style: AppText.pageSubtitle),
+                ),
+              ],
+              Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 40),
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        FilledButton(
-                          onPressed: onAddManually,
-                          child: const Text('添加账户'),
+                        Container(
+                          width: 76,
+                          height: 76,
+                          decoration: BoxDecoration(
+                            color: AppColors.primarySoft,
+                            borderRadius: BorderRadius.circular(26),
+                          ),
+                          child: const Icon(
+                            Icons.person_outline_rounded,
+                            size: 34,
+                            color: AppColors.primary,
+                          ),
                         ),
-                        const SizedBox(height: 10),
-                        OutlinedButton(
-                          onPressed: onAddByQr,
-                          child: const Text('扫码添加'),
+                        const SizedBox(height: 18),
+                        const Text('还没有账户', style: AppText.emptyTitle),
+                        const SizedBox(height: AppSpacing.sm),
+                        const Text(
+                          '添加第一个 Foxel 服务器\n即可开始管理文件',
+                          textAlign: TextAlign.center,
+                          style: AppText.emptyBody,
+                        ),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: 230,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              FilledButton(
+                                onPressed: onAddManually,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: AppSpacing.lg,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadii.tile,
+                                    ),
+                                  ),
+                                ),
+                                child: const Text(
+                                  '添加账户',
+                                  style: AppText.button,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              OutlinedButton(
+                                onPressed: onAddByQr,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.ink,
+                                  side: const BorderSide(
+                                    color: AppColors.border,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: AppSpacing.lg,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadii.tile,
+                                    ),
+                                  ),
+                                ),
+                                child: const Text(
+                                  '扫码添加',
+                                  style: AppText.button,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
-        ),
-      ],
-    );
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FA),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-          child: content,
         ),
       ),
     );
@@ -276,20 +310,21 @@ class _CurrentAccountCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = Color(account.colorValue);
+    final stale = account.isStale;
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.55), width: 1.5),
-      ),
+      padding: const EdgeInsets.all(AppSpacing.card),
+      decoration: AppDecorations.currentAccount(color),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              AccountAvatar(account: account, size: 56, radius: 18),
-              const SizedBox(width: 12),
+              AccountAvatar(
+                account: account,
+                size: 56,
+                radius: AppRadii.avatarLarge,
+              ),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -301,6 +336,7 @@ class _CurrentAccountCard extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
+                        color: AppColors.ink,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -308,21 +344,14 @@ class _CurrentAccountCard extends StatelessWidget {
                       account.accountLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF93A0AF),
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: AppText.itemSubtitle,
                     ),
                     const SizedBox(height: 2),
                     Text(
                       account.hostLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        color: Color(0xFF93A0AF),
-                      ),
+                      style: AppText.itemHint,
                     ),
                   ],
                 ),
@@ -332,22 +361,19 @@ class _CurrentAccountCard extends StatelessWidget {
                   horizontal: 9,
                   vertical: 4,
                 ),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(99),
+                decoration: AppDecorations.pill(
+                  stale ? AppColors.warn : color,
                 ),
                 child: Text(
-                  account.isStale ? '需重新验证' : '使用中',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
-                    color: account.isStale ? const Color(0xFFF59E0B) : color,
+                  stale ? '需重新验证' : '使用中',
+                  style: AppText.pill.copyWith(
+                    color: stale ? AppColors.warn : color,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: AppSpacing.lg),
           Row(
             children: [
               _StatChip(
@@ -355,23 +381,31 @@ class _CurrentAccountCard extends StatelessWidget {
                 value: '$runningTasks',
                 color: color,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: _StatChip(
                   label: '上次使用',
                   value: _formatLastUsed(account.lastUsedAt),
-                  color: const Color(0xFF93A0AF),
+                  color: AppColors.ink3,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: onEdit,
               icon: const Icon(Icons.tune_rounded, size: 18),
-              label: const Text('编辑账户信息'),
+              label: const Text('编辑账户信息', style: AppText.button),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.ink,
+                side: const BorderSide(color: AppColors.border),
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadii.tile),
+                ),
+              ),
             ),
           ),
         ],
@@ -401,6 +435,7 @@ class _StatChip extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             value,
@@ -413,7 +448,7 @@ class _StatChip extends StatelessWidget {
           const SizedBox(height: 1),
           Text(
             label,
-            style: const TextStyle(fontSize: 10.5, color: Color(0xFF93A0AF)),
+            style: const TextStyle(fontSize: 10.5, color: AppColors.ink3),
           ),
         ],
       ),
@@ -439,33 +474,36 @@ class _AccountTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-      leading: AccountAvatar(account: account, size: 40),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: 2,
+      ),
+      leading: AccountAvatar(
+        account: account,
+        size: 40,
+        radius: AppRadii.avatar,
+      ),
       title: Text(
         account.displayName,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
+        style: AppText.itemTitle,
       ),
       subtitle: Text(
         '${account.hostLabel} · ${_formatLastUsed(account.lastUsedAt)}',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 12,
-          color: account.isStale
-              ? const Color(0xFFF59E0B)
-              : const Color(0xFF93A0AF),
-          fontWeight: FontWeight.w600,
+        style: AppText.itemSubtitle.copyWith(
+          color: account.isStale ? AppColors.warn : AppColors.ink3,
         ),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (account.isStale)
-            const _Tag(text: '失效', color: Color(0xFFF59E0B))
+            const _Tag(text: '失效', color: AppColors.warn)
           else if (runningTasks > 0)
-            _Tag(text: '$runningTasks 传输', color: const Color(0xFF93A0AF)),
+            _Tag(text: '$runningTasks 传输', color: AppColors.ink3),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert_rounded, size: 20),
             onSelected: (value) {
@@ -496,39 +534,10 @@ class _Tag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(right: 4),
+      margin: const EdgeInsets.only(right: AppSpacing.xs),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(99),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          color: color,
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w800,
-        color: Color(0xFF93A0AF),
-        letterSpacing: 0.6,
-      ),
+      decoration: AppDecorations.pill(color),
+      child: Text(text, style: AppText.pill.copyWith(color: color)),
     );
   }
 }
@@ -541,11 +550,7 @@ class _Group extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE7ECF2)),
-      ),
+      decoration: AppDecorations.group(),
       child: Column(children: children),
     );
   }
@@ -560,21 +565,16 @@ class _EmptyHint extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE7ECF2)),
-      ),
+      decoration: AppDecorations.group(),
       child: Row(
         children: [
-          const Icon(Icons.info_outline_rounded, color: Color(0xFF93A0AF)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(fontSize: 12.5, color: Color(0xFF93A0AF)),
-            ),
+          const Icon(
+            Icons.info_outline_rounded,
+            size: 18,
+            color: AppColors.ink3,
           ),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text, style: AppText.itemSubtitle)),
         ],
       ),
     );

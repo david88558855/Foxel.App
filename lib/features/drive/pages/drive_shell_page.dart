@@ -1,10 +1,9 @@
-import 'dart:ui';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'package:foxel/core/api/foxel_api.dart';
 import 'package:foxel/core/models/account.dart';
+import 'package:foxel/core/theme/design_tokens.dart';
 import 'package:foxel/features/drive/controllers/transfer_task_controller.dart';
 import 'package:foxel/features/drive/pages/file_browser_page.dart';
 import 'package:foxel/features/drive/pages/transfer_tasks_page.dart';
@@ -231,98 +230,53 @@ class _FloatingBottomNav extends StatelessWidget {
       top: false,
       child: SizedBox(
         height: 74,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(30),
-          child: Stack(
-            children: [
-              BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFFF4F6F8).withValues(alpha: 0.76),
-                        const Color(0xFFD7DDE4).withValues(alpha: 0.50),
-                      ],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.62),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF8B97AA).withValues(alpha: 0.12),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
-                      ),
-                      BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.24),
-                        blurRadius: 1,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Positioned(
-                left: 14,
-                right: 14,
-                top: 6,
-                child: IgnorePointer(
-                  child: Container(
-                    height: 14,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(999),
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.white.withValues(alpha: 0.56),
-                          Colors.white.withValues(alpha: 0.04),
-                        ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    const segmentGap = 14.0;
-                    final segmentWidth = constraints.maxWidth / _items.length;
-                    return Stack(
-                      children: [
-                        AnimatedPositioned(
-                          duration: const Duration(milliseconds: 260),
-                          curve: Curves.easeOutCubic,
-                          left: segmentWidth * currentIndex + segmentGap / 2,
-                          top: 2,
-                          width: segmentWidth - segmentGap,
-                          height: constraints.maxHeight - 4,
-                          child: const _SelectedNavSegment(),
-                        ),
-                        Row(
-                          children: [
-                            for (var index = 0; index < _items.length; index++)
-                              Expanded(
-                                child: _FloatingNavButton(
-                                  item: _items[index],
-                                  selected: index == currentIndex,
-                                  activeColor: activeColor,
-                                  onTap: () => onSelected(index),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    );
-                  },
-                ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadii.nav),
+            border: Border.all(color: AppColors.border),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x1F8B97AA),
+                blurRadius: 20,
+                offset: Offset(0, 10),
               ),
             ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                const segmentGap = 14.0;
+                final segmentWidth = constraints.maxWidth / _items.length;
+                return Stack(
+                  children: [
+                    AnimatedPositioned(
+                      duration: const Duration(milliseconds: 260),
+                      curve: Curves.easeOutCubic,
+                      left: segmentWidth * currentIndex + segmentGap / 2,
+                      top: 2,
+                      width: segmentWidth - segmentGap,
+                      height: constraints.maxHeight - 4,
+                      child: _SelectedNavSegment(color: activeColor),
+                    ),
+                    Row(
+                      children: [
+                        for (var index = 0; index < _items.length; index++)
+                          Expanded(
+                            child: _FloatingNavButton(
+                              item: _items[index],
+                              selected: index == currentIndex,
+                              activeColor: activeColor,
+                              onTap: () => onSelected(index),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -345,13 +299,13 @@ class _FloatingNavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const inactiveColor = Color(0xFF818791);
+    const inactiveColor = AppColors.ink3;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(AppRadii.nav),
           onTap: onTap,
           child: SizedBox.expand(
             child: Column(
@@ -371,10 +325,10 @@ class _FloatingNavButton extends StatelessWidget {
                 AnimatedDefaultTextStyle(
                   duration: const Duration(milliseconds: 220),
                   curve: Curves.easeOutCubic,
-                  style: Theme.of(context).textTheme.labelSmall!.copyWith(
+                  style: TextStyle(
                     color: selected ? activeColor : inactiveColor,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    fontSize: 10,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    fontSize: 10.5,
                     letterSpacing: 0,
                     height: 1,
                   ),
@@ -394,60 +348,16 @@ class _FloatingNavButton extends StatelessWidget {
 }
 
 class _SelectedNavSegment extends StatelessWidget {
-  const _SelectedNavSegment();
+  const _SelectedNavSegment({required this.color});
+
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: Stack(
-        children: [
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.white.withValues(alpha: 0.66),
-                    const Color(0xFFE4E8EE).withValues(alpha: 0.42),
-                  ],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.52)),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFACB7C8).withValues(alpha: 0.14),
-                    blurRadius: 12,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Positioned(
-            left: 8,
-            right: 8,
-            top: 3,
-            child: IgnorePointer(
-              child: Container(
-                height: 12,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(999),
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.white.withValues(alpha: 0.70),
-                      Colors.white.withValues(alpha: 0.08),
-                    ],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+    return Container(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppRadii.navSegment),
       ),
     );
   }

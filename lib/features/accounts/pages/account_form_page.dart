@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:foxel/core/api/foxel_api.dart';
 import 'package:foxel/core/models/account.dart';
 import 'package:foxel/core/storage/download_dir_store.dart';
+import 'package:foxel/core/theme/design_tokens.dart';
 import 'package:foxel/features/accounts/widgets/account_avatar.dart';
 
 /// 新建 / 编辑账户表单。
@@ -21,7 +24,8 @@ class AccountFormPage extends StatefulWidget {
   final Account? account;
 
   /// 保存账户；新建时 [switchAfterAdd] 表示是否立即切换到该账户。
-  final void Function(Account account, {bool switchAfterAdd}) onSave;
+  /// 异步返回后再关闭页面，避免首个账户创建后仍停留在空态。
+  final Future<void> Function(Account account, {bool switchAfterAdd}) onSave;
 
   /// 编辑模式下「退出登录」：清除该账户凭证，账户转为失效状态。
   final VoidCallback? onLogout;
@@ -150,7 +154,10 @@ class _AccountFormPageState extends State<AccountFormPage> {
       if (!mounted) {
         return;
       }
-      widget.onSave(account, switchAfterAdd: _switchAfterAdd);
+      await widget.onSave(account, switchAfterAdd: _switchAfterAdd);
+      if (!mounted) {
+        return;
+      }
       Navigator.of(context).pop();
     } catch (error) {
       if (!mounted) {
@@ -198,10 +205,12 @@ class _AccountFormPageState extends State<AccountFormPage> {
   Widget build(BuildContext context) {
     final account = widget.account;
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FA),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(_isEdit ? '编辑账户' : '添加账户'),
-        backgroundColor: const Color(0xFFF4F7FA),
+        backgroundColor: AppColors.background,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
       ),
       body: SafeArea(
         child: ListView(
@@ -321,6 +330,14 @@ class _AccountFormPageState extends State<AccountFormPage> {
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: _verifying ? null : _submit,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadii.tile),
+                ),
+              ),
               icon: _verifying
                   ? const SizedBox(
                       width: 18,
@@ -328,7 +345,10 @@ class _AccountFormPageState extends State<AccountFormPage> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.verified_rounded),
-              label: Text(_verifying ? '验证中' : (_isEdit ? '保存' : '验证并添加')),
+              label: Text(
+                _verifying ? '验证中' : (_isEdit ? '保存' : '验证并添加'),
+                style: AppText.button,
+              ),
             ),
             if (_isEdit) ...[
               const SizedBox(height: 24),
@@ -374,7 +394,7 @@ class _AccountFormPageState extends State<AccountFormPage> {
       rememberBrowseState: rememberBrowseState,
       isolatedCache: isolatedCache,
     );
-    widget.onSave(updated, switchAfterAdd: false);
+    unawaited(widget.onSave(updated, switchAfterAdd: false));
     setState(() {});
   }
 

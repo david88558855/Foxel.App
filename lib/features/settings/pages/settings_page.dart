@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:foxel/core/models/account.dart';
 import 'package:foxel/core/storage/download_dir_store.dart';
+import 'package:foxel/core/theme/design_tokens.dart';
 import 'package:foxel/features/accounts/widgets/account_avatar.dart';
 
 /// 设置页（底部导航第三个 Tab）。
@@ -30,11 +31,13 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   String? _downloadDir;
+  int? _usageBytes;
 
   @override
   void initState() {
     super.initState();
     _loadDownloadDir();
+    _loadUsage();
   }
 
   @override
@@ -42,6 +45,7 @@ class _SettingsPageState extends State<SettingsPage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.account.id != widget.account.id) {
       _loadDownloadDir();
+      _loadUsage();
     }
   }
 
@@ -52,40 +56,65 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _loadUsage() async {
+    final bytes = await DownloadDirStore.dirSizeBytes(widget.account.id);
+    if (mounted) {
+      setState(() => _usageBytes = bytes);
+    }
+  }
+
+  String get _usageLabel {
+    final bytes = _usageBytes;
+    if (bytes == null) {
+      return '计算中';
+    }
+    if (bytes == 0) {
+      return '暂无已下载文件';
+    }
+    return '本地已下载 ${_formatBytes(bytes)}';
+  }
+
+  static String _formatBytes(int bytes) {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var value = bytes.toDouble();
+    var index = 0;
+    while (value >= 1024 && index < units.length - 1) {
+      value /= 1024;
+      index++;
+    }
+    final text = value >= 100 ? value.toStringAsFixed(0) : value.toStringAsFixed(1);
+    return '$text ${units[index]}';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final color = Color(widget.account.colorValue);
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FA),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 126),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.page,
+            AppSpacing.lg,
+            AppSpacing.page,
+            AppSpacing.navBottom,
+          ),
           children: [
-            Text(
-              '设置',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-            ),
+            const Text('设置', style: AppText.pageTitle),
             const SizedBox(height: 2),
             Text(
               widget.account.displayName,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF93A0AF),
-                fontWeight: FontWeight.w600,
-              ),
+              style: AppText.pageSubtitle,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: AppSpacing.lg),
             _CurrentAccountCard(
               account: widget.account,
               accountCount: widget.accountCount,
               onOpenAccountCenter: widget.onOpenAccountCenter,
             ),
-            const SizedBox(height: 16),
-            const _SectionLabel(text: '通用'),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.xl),
+            const Text('通用', style: AppText.sectionLabel),
+            const SizedBox(height: AppSpacing.sm),
             _Group(
               children: [
                 _SettingsRow(
@@ -94,6 +123,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   subtitle: _downloadDir ?? '加载中',
                   onTap: _editDownloadDir,
                 ),
+                _SettingsRow(
+                  icon: Icons.storage_rounded,
+                  title: '存储用量',
+                  subtitle: _usageLabel,
+                  onTap: _loadUsage,
+                ),
                 const _SettingsRow(
                   icon: Icons.info_outline_rounded,
                   title: '关于 Foxel',
@@ -101,9 +136,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            const _SectionLabel(text: '当前账户'),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.xl),
+            const Text('当前账户', style: AppText.sectionLabel),
+            const SizedBox(height: AppSpacing.sm),
             _Group(
               children: [
                 _SettingsRow(
@@ -113,23 +148,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   warning: true,
                   onTap: () => widget.onClearLocalData(widget.account),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
-                '切换账户、添加或移除账户请进入「账户管理」',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: Color(0xFF93A0AF),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            _Group(
-              children: [
                 _SettingsRow(
                   icon: Icons.add_rounded,
                   title: '添加账户',
@@ -137,6 +155,14 @@ class _SettingsPageState extends State<SettingsPage> {
                   onTap: widget.onAddAccount,
                 ),
               ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+              child: Text(
+                '切换账户、添加或移除账户请进入「账户管理」',
+                style: AppText.itemHint,
+              ),
             ),
           ],
         ),
@@ -170,14 +196,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   prefixIcon: Icon(Icons.folder_rounded),
                 ),
               ),
-              const SizedBox(height: 10),
-              Text(
-                '默认：$defaultDir',
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  color: Color(0xFF93A0AF),
-                ),
-              ),
             ],
           ),
           actions: [
@@ -205,9 +223,7 @@ class _SettingsPageState extends State<SettingsPage> {
       await DownloadDirStore.resetDirFor(account.id);
       await _loadDownloadDir();
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('已恢复默认下载目录')));
+        _showMessage('已恢复默认：$defaultDir');
       }
       return;
     }
@@ -217,14 +233,18 @@ class _SettingsPageState extends State<SettingsPage> {
     final writable = await DownloadDirStore.isWritable(result);
     if (!writable) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('该目录不可写入')));
+        _showMessage('该目录不可写入');
       }
       return;
     }
     await DownloadDirStore.setDirFor(account.id, result);
     await _loadDownloadDir();
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -243,19 +263,19 @@ class _CurrentAccountCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = Color(account.colorValue);
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.55), width: 1.5),
-      ),
+      decoration: AppDecorations.currentAccount(color),
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.card),
             child: Row(
               children: [
-                AccountAvatar(account: account, size: 48, radius: 16),
-                const SizedBox(width: 12),
+                AccountAvatar(
+                  account: account,
+                  size: 48,
+                  radius: AppRadii.avatarLarge,
+                ),
+                const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,6 +287,7 @@ class _CurrentAccountCard extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 15.5,
                           fontWeight: FontWeight.w800,
+                          color: AppColors.ink,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -274,11 +295,7 @@ class _CurrentAccountCard extends StatelessWidget {
                         '${account.accountLabel} · ${account.hostLabel}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          color: Color(0xFF93A0AF),
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: AppText.itemHint,
                       ),
                     ],
                   ),
@@ -288,37 +305,35 @@ class _CurrentAccountCard extends StatelessWidget {
                     horizontal: 9,
                     vertical: 4,
                   ),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(99),
+                  decoration: AppDecorations.pill(
+                    account.isStale ? AppColors.warn : color,
                   ),
                   child: Text(
                     account.isStale ? '需重新验证' : '使用中',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w800,
-                      color: account.isStale ? const Color(0xFFF59E0B) : color,
+                    style: AppText.pill.copyWith(
+                      color: account.isStale ? AppColors.warn : color,
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          const Divider(height: 1, color: Color(0xFFE7ECF2)),
+          Divider(height: 1, color: AppColors.border),
           InkWell(
             onTap: onOpenAccountCenter,
             borderRadius: const BorderRadius.vertical(
-              bottom: Radius.circular(20),
+              bottom: Radius.circular(AppRadii.card),
             ),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.card,
+                AppSpacing.md,
+                AppSpacing.card,
+                AppSpacing.lg,
+              ),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.manage_accounts_rounded,
-                    size: 19,
-                    color: color,
-                  ),
+                  Icon(Icons.manage_accounts_rounded, size: 19, color: color),
                   const SizedBox(width: 10),
                   Text(
                     '账户管理',
@@ -328,45 +343,22 @@ class _CurrentAccountCard extends StatelessWidget {
                       color: color,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpacing.sm),
                   Text(
                     '共 $accountCount 个账户',
-                    style: const TextStyle(
-                      fontSize: 11.5,
-                      color: Color(0xFF93A0AF),
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: AppText.itemHint,
                   ),
                   const Spacer(),
-                  const Icon(
+                  Icon(
                     Icons.chevron_right_rounded,
                     size: 20,
-                    color: Color(0xFF93A0AF),
+                    color: AppColors.ink3,
                   ),
                 ],
               ),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w800,
-        color: Color(0xFF93A0AF),
-        letterSpacing: 0.6,
       ),
     );
   }
@@ -380,11 +372,7 @@ class _Group extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE7ECF2)),
-      ),
+      decoration: AppDecorations.group(),
       child: Column(children: children),
     );
   }
@@ -407,29 +395,28 @@ class _SettingsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = warning
-        ? const Color(0xFFF59E0B)
-        : const Color(0xFF5C6B7A);
+    final color = warning ? AppColors.warn : AppColors.ink2;
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: 2,
+      ),
       leading: Icon(icon, size: 20, color: color),
       title: Text(
         title,
-        style: TextStyle(
-          fontSize: 14.5,
-          fontWeight: FontWeight.w700,
-          color: warning ? color : const Color(0xFF16202C),
+        style: AppText.itemTitle.copyWith(
+          color: warning ? AppColors.warn : AppColors.ink,
         ),
       ),
       subtitle: Text(
         subtitle,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontSize: 11.5, color: Color(0xFF93A0AF)),
+        style: AppText.itemHint,
       ),
       trailing: onTap == null
           ? null
-          : const Icon(Icons.chevron_right_rounded, size: 20),
+          : Icon(Icons.chevron_right_rounded, size: 20, color: AppColors.ink3),
       onTap: onTap,
     );
   }
