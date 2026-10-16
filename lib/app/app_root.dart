@@ -322,6 +322,13 @@ class _AppRootState extends State<AppRoot> {
             setState(() {
               if (_active?.id == updated.id) {
                 _active = updated;
+                // 服务器地址或凭证变化后必须重建客户端，否则仍在访问旧地址。
+                _api?.close();
+                _api = FoxelApi(
+                  baseUrl: updated.baseUrl,
+                  token: updated.token,
+                );
+                _lastBaseUrl = updated.baseUrl;
               }
             });
             _showMessage('已保存「${updated.displayName}」');
