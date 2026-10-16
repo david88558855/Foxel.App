@@ -509,6 +509,8 @@ class _AppRootState extends State<AppRoot> {
   }
 
   Future<bool> _removeAccountsInternal(List<Account> accounts) async {
+    final isBatch = accounts.length > 1;
+    final names = accounts.map((item) => '「${item.displayName}」').join('、');
     final ids = accounts.map((item) => item.id).toList();
     final removingActive = ids.contains(_active?.id);
 
