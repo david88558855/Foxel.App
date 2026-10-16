@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:foxel/core/api/foxel_api.dart';
 import 'package:foxel/core/models/account.dart';
 import 'package:foxel/core/models/session.dart';
+import 'package:foxel/core/platform/portable_path_provider.dart';
 import 'package:foxel/core/storage/account_store.dart';
 import 'package:foxel/features/accounts/pages/account_center_page.dart';
 import 'package:foxel/features/accounts/pages/account_form_page.dart';
@@ -38,6 +39,8 @@ class _AppRootState extends State<AppRoot> {
   @override
   void initState() {
     super.initState();
+    // 双保险：确保首次读取账户数据前便携版路径已生效（插件此刻必定已注册）。
+    PortableStorage.ensureConfigured();
     _bootstrap();
   }
 
