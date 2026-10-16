@@ -1,3 +1,5 @@
+import 'dart:math';
+
 /// 一个 Foxel 账户 = 一个独立沙箱。
 ///
 /// 每个账户拥有自己的凭证、下载目录、传输任务、浏览状态与缓存，
@@ -60,8 +62,13 @@ class Account {
     0xFF14B8A6,
   ];
 
+  static final Random _random = Random();
+
+  /// 账户 ID：时间戳 + 随机后缀，避免同微秒内批量创建时撞车。
   static String generateId() {
-    return 'acc_${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
+    final stamp = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+    final suffix = _random.nextInt(0x1000000).toRadixString(36).padLeft(5, '0');
+    return 'acc_${stamp}_$suffix';
   }
 
   static int colorForIndex(int index) {
@@ -181,7 +188,7 @@ class Account {
       token: token,
       email: json['email'] as String? ?? '',
       avatarUrl: json['avatarUrl'] as String? ?? '',
-      colorValue: json['colorValue'] as int? ?? defaultColorValue,
+      colorValue: _asInt(json['colorValue']) ?? defaultColorValue,
       createdAt: _dateFrom(json['createdAt']),
       lastUsedAt: _dateFrom(json['lastUsedAt']),
       isolatedDownloadDir: json['isolatedDownloadDir'] as bool? ?? true,
@@ -190,6 +197,20 @@ class Account {
       isolatedCache: json['isolatedCache'] as bool? ?? true,
       isStale: json['isStale'] as bool? ?? false,
     );
+  }
+
+  /// 容错取整：索引被外部改写时也不抛类型错误。
+  static int? _asInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    if (value is String) {
+      return int.tryParse(value);
+    }
+    return null;
   }
 
   static DateTime? _dateFrom(dynamic value) {

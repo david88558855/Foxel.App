@@ -394,13 +394,15 @@ class _LoginPageState extends State<LoginPage> {
       _errorText = null;
       _statusText = '正在登录';
     });
+    final client = FoxelApi(baseUrl: _baseUrlController.text);
     try {
-      final api = FoxelApi(baseUrl: _baseUrlController.text);
-      final session = await api.login(
+      final session = await client.login(
         username: _usernameController.text,
         password: _passwordController.text,
       );
-      api.close();
+      if (!mounted) {
+        return;
+      }
       widget.onLoggedIn(session);
     } catch (error) {
       if (!mounted) {
@@ -411,6 +413,8 @@ class _LoginPageState extends State<LoginPage> {
         _statusText = null;
       });
     } finally {
+      // 无论成功失败都关闭临时客户端，避免失败路径泄漏连接。
+      client.close();
       if (mounted) {
         setState(() => _loggingIn = false);
       }
@@ -418,7 +422,23 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _submitRawValue(String rawValue) async {
-    final payload = QrLoginPayload.parse(rawValue);
+    // 由相机帧回调触发，需自行兜住异常并检查生命周期。
+    final QrLoginPayload payload;
+    try {
+      payload = QrLoginPayload.parse(rawValue);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _errorText = error.toString();
+        _statusText = null;
+      });
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _baseUrlController.text = payload.baseUrl;
       _statusText = '正在验证登录状态';
@@ -432,17 +452,19 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
     setState(() => _loggingIn = true);
+    final client = FoxelApi(baseUrl: payload.baseUrl, token: payload.token);
     try {
-      final api = FoxelApi(baseUrl: payload.baseUrl, token: payload.token);
-      final profile = await api.me();
+      final profile = await client.me();
       final session = FoxelSession(
-        baseUrl: api.baseUrl,
+        baseUrl: client.baseUrl,
         username: profile.username.isEmpty ? '未命名用户' : profile.username,
         token: payload.token,
         email: profile.email,
         avatarUrl: profile.avatarUrl,
       );
-      api.close();
+      if (!mounted) {
+        return;
+      }
       widget.onLoggedIn(session);
     } catch (error) {
       if (!mounted) {
@@ -453,6 +475,7 @@ class _LoginPageState extends State<LoginPage> {
         _statusText = null;
       });
     } finally {
+      client.close();
       if (mounted) {
         setState(() => _loggingIn = false);
       }

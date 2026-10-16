@@ -1,34 +1,32 @@
 import 'package:flutter/material.dart';
 
 import 'package:foxel/core/models/account.dart';
+import 'package:foxel/core/models/accounts_snapshot.dart';
 import 'package:foxel/core/theme/design_tokens.dart';
 import 'package:foxel/core/widgets/content_frame.dart';
 import 'package:foxel/features/accounts/widgets/account_avatar.dart';
 
 /// 账户管理页。
 ///
-/// - 有账户时：从「设置 → 账户管理」进入的独立二级页（AppBar 返回 + 右上「+」），
-///   点击列表项即切换账户。
+/// - 有账户时：从「设置 → 账户管理」进入的独立二级页（AppBar 返回 + 右上「编辑」），
+///   点击列表项即切换账户；「编辑」进入多选模式批量删除。
 /// - 无账户时：作为启动首页呈现唯一空态（居中引导 + 添加账户 / 扫码添加），
 ///   此时不显示返回按钮与底部导航。
-class AccountCenterPage extends StatelessWidget {
+class AccountCenterPage extends StatefulWidget {
   const AccountCenterPage({
     super.key,
-    required this.accounts,
-    required this.activeId,
-    required this.runningTaskCounts,
+    required this.snapshot,
     required this.onSwitchAccount,
     required this.onAddAccount,
     required this.onAddManually,
     required this.onAddByQr,
     required this.onEditAccount,
-    required this.onRemoveAccount,
+    required this.onRemoveAccounts,
     this.asRoot = false,
   });
 
-  final List<Account> accounts;
-  final String? activeId;
-  final Map<String, int> runningTaskCounts;
+  /// 账户数据源（增删改后实时刷新）。
+  final ValueListenable<AccountsSnapshot> snapshot;
 
   /// 切换账户；返回 true 表示切换成功。
   final Future<bool> Function(Account account) onSwitchAccount;
@@ -39,133 +37,286 @@ class AccountCenterPage extends StatelessWidget {
   final VoidCallback onAddByQr;
   final ValueChanged<Account> onEditAccount;
 
-  /// 移除账户；返回 true 表示已删除（页面据此返回上级）。
-  final Future<bool> Function(Account account) onRemoveAccount;
+  /// 批量移除账户；返回 true 表示已删除。
+  final Future<bool> Function(List<Account> accounts) onRemoveAccounts;
 
   /// 无账户启动时以根页面形态呈现。
   final bool asRoot;
 
-  Account? get _active {
-    final id = activeId;
-    for (final account in accounts) {
-      if (account.id == id) {
-        return account;
+  @override
+  State<AccountCenterPage> createState() => _AccountCenterPageState();
+}
+
+class _AccountCenterPageState extends State<AccountCenterPage> {
+  bool _editing = false;
+  final Set<String> _selected = <String>{};
+
+  void _enterEditMode() {
+    setState(() {
+      _editing = true;
+      _selected.clear();
+    });
+  }
+
+  void _exitEditMode() {
+    setState(() {
+      _editing = false;
+      _selected.clear();
+    });
+  }
+
+  void _toggle(Account account) {
+    setState(() {
+      if (!_selected.remove(account.id)) {
+        _selected.add(account.id);
       }
+    });
+  }
+
+  void _toggleAll(List<Account> selectable) {
+    setState(() {
+      final allSelected =
+          selectable.isNotEmpty &&
+          selectable.every((account) => _selected.contains(account.id));
+      _selected.clear();
+      if (!allSelected) {
+        _selected.addAll(selectable.map((account) => account.id));
+      }
+    });
+  }
+
+  Future<void> _deleteSelected(List<Account> selectable) async {
+    final targets = <Account>[
+      for (final account in selectable)
+        if (_selected.contains(account.id)) account,
+    ];
+    if (targets.isEmpty) {
+      return;
     }
-    return accounts.isEmpty ? null : accounts.first;
+    final removed = await widget.onRemoveAccounts(targets);
+    if (!mounted) {
+      return;
+    }
+    if (removed) {
+      _exitEditMode();
+    }
+  }
+
+  Future<void> _handleSwitch(Account account) async {
+    final ok = await widget.onSwitchAccount(account);
+    if (!ok || !mounted) {
+      return;
+    }
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final active = _active;
-    if (active == null) {
-      return _EmptyState(
-        asRoot: asRoot,
-        onAddManually: onAddManually,
-        onAddByQr: onAddByQr,
-      );
-    }
+    return ValueListenableBuilder<AccountsSnapshot>(
+      valueListenable: widget.snapshot,
+      builder: (context, snapshot, _) {
+        final active = snapshot.active;
+        if (active == null) {
+          return _EmptyState(
+            asRoot: widget.asRoot,
+            onAddManually: widget.onAddManually,
+            onAddByQr: widget.onAddByQr,
+          );
+        }
 
-    final others = <Account>[
-      for (final account in accounts)
-        if (account.id != active.id) account,
-    ];
+        // 当前账户不可删除，多选只针对其他账户。
+        final selectable = snapshot.others;
+        final selectedAccounts = <Account>[
+          for (final account in selectable)
+            if (_selected.contains(account.id)) account,
+        ];
 
-    final body = ListView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.page,
-        6,
-        AppSpacing.page,
-        32,
-      ),
-      children: [
-        _CurrentAccountCard(
-          account: active,
-          runningTasks: runningTaskCounts[active.id] ?? 0,
-          onEdit: () => onEditAccount(active),
-        ),
-        const SizedBox(height: AppSpacing.xl),
-        Text(
-          others.isEmpty ? '其他账户' : '其他账户 · 点选即切换 (${others.length})',
-          style: AppText.sectionLabel,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        if (others.isEmpty)
-          const _EmptyHint(text: '还没有其他账户，添加后可在这里切换')
-        else
-          _Group(
-            children: [
-              for (final account in others)
-                _AccountTile(
-                  account: account,
-                  runningTasks: runningTaskCounts[account.id] ?? 0,
-                  onTap: () => _handleSwitch(context, account),
-                  onEdit: () => onEditAccount(account),
-                  onRemove: () => _handleRemove(context, account),
+        final body = ListView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.page,
+            6,
+            AppSpacing.page,
+            32,
+          ),
+          children: [
+            _CurrentAccountCard(
+              account: active,
+              runningTasks: snapshot.runningTaskCounts[active.id] ?? 0,
+              editing: _editing,
+              onEdit: () => widget.onEditAccount(active),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            Text(
+              selectable.isEmpty
+                  ? '其他账户'
+                  : _editing
+                  ? '勾选要删除的账户 (${selectable.length})'
+                  : '其他账户 · 点选即切换 (${selectable.length})',
+              style: AppText.sectionLabel,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            if (selectable.isEmpty)
+              const _EmptyHint(text: '还没有其他账户，添加后可在这里切换')
+            else
+              _Group(
+                children: [
+                  for (final account in selectable)
+                    _AccountTile(
+                      account: account,
+                      runningTasks:
+                          snapshot.runningTaskCounts[account.id] ?? 0,
+                      editing: _editing,
+                      selected: _selected.contains(account.id),
+                      onTap: () => _editing
+                          ? _toggle(account)
+                          : _handleSwitch(account),
+                      onEdit: () => widget.onEditAccount(account),
+                      onRemove: () => widget.onRemoveAccounts(<Account>[
+                        account,
+                      ]),
+                    ),
+                ],
+              ),
+            if (_editing && selectable.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.md),
+              InkWell(
+                onTap: () => _toggleAll(selectable),
+                borderRadius: BorderRadius.circular(AppRadii.tile),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.xs,
+                    vertical: AppSpacing.sm,
+                  ),
+                  child: Row(
+                    children: [
+                      _CheckBox(
+                        checked: selectable.every(
+                          (account) => _selected.contains(account.id),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      const Text(
+                        '全选',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      const Expanded(
+                        child: Text(
+                          '当前账户不会被删除',
+                          style: AppText.itemHint,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+              ),
+            ],
+            if (!_editing) ...[
+              const SizedBox(height: AppSpacing.lg),
+              OutlinedButton.icon(
+                onPressed: widget.onAddAccount,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('添加账户'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.ink,
+                  side: const BorderSide(color: AppColors.border),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: AppSpacing.md,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadii.tile),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        );
+
+        if (widget.asRoot) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            body: SafeArea(child: ContentFrame(child: body)),
+          );
+        }
+
+        if (_editing) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: AppBar(
+              automaticallyImplyLeading: false,
+              leadingWidth: 76,
+              leading: TextButton(
+                onPressed: _exitEditMode,
+                child: const Text(
+                  '取消',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.ink2,
+                  ),
+                ),
+              ),
+              title: Text(
+                selectedAccounts.isEmpty
+                    ? '选择账户'
+                    : '已选择 ${selectedAccounts.length} 项',
+              ),
+              centerTitle: true,
+              actions: [
+                TextButton(
+                  onPressed: selectedAccounts.isEmpty
+                      ? null
+                      : () => _deleteSelected(selectable),
+                  child: Text(
+                    '删除',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      color: selectedAccounts.isEmpty
+                          ? AppColors.ink3
+                          : AppColors.danger,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.xs),
+              ],
+            ),
+            body: SafeArea(top: false, child: ContentFrame(child: body)),
+          );
+        }
+
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            title: const Text('账户管理'),
+            actions: [
+              TextButton(
+                onPressed: selectable.isEmpty ? null : _enterEditMode,
+                child: Text(
+                  '编辑',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                    color: selectable.isEmpty
+                        ? AppColors.ink3
+                        : AppColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
             ],
           ),
-        const SizedBox(height: AppSpacing.lg),
-        OutlinedButton.icon(
-          onPressed: onAddAccount,
-          icon: const Icon(Icons.add_rounded, size: 18),
-          label: const Text('添加账户', style: AppText.button),
-        ),
-        const SizedBox(height: 10),
-        const Text(
-          '点选账户即切换；切换后本账户的下载目录、任务与缓存与其他账户互相隔离。',
-          style: AppText.itemHint,
-        ),
-      ],
+          body: SafeArea(top: false, child: ContentFrame(child: body)),
+        );
+      },
     );
-
-    if (asRoot) {
-      return Scaffold(
-        backgroundColor: AppColors.background,
-        body: SafeArea(child: ContentFrame(child: body)),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('账户管理'),
-        backgroundColor: AppColors.background,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        titleTextStyle: AppText.pageTitle.copyWith(fontSize: 17),
-        actions: [
-          IconButton(
-            onPressed: onAddAccount,
-            icon: const Icon(Icons.add_rounded),
-            tooltip: '添加账户',
-          ),
-        ],
-      ),
-      body: SafeArea(top: false, child: ContentFrame(child: body)),
-    );
-  }
-
-  Future<void> _handleSwitch(BuildContext context, Account account) async {
-    final ok = await onSwitchAccount(account);
-    if (!ok || !context.mounted) {
-      return;
-    }
-    final navigator = Navigator.of(context);
-    if (navigator.canPop()) {
-      navigator.pop();
-    }
-  }
-
-  Future<void> _handleRemove(BuildContext context, Account account) async {
-    final removed = await onRemoveAccount(account);
-    if (!removed || !context.mounted) {
-      return;
-    }
-    final navigator = Navigator.of(context);
-    if (navigator.canPop()) {
-      navigator.pop();
-    }
   }
 }
 
@@ -188,110 +339,84 @@ class _EmptyState extends StatelessWidget {
       body: SafeArea(
         child: ContentFrame(
           child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.page,
-            AppSpacing.lg,
-            AppSpacing.page,
-            24,
-          ),
-          child: Column(
-            children: [
-              if (asRoot) ...[
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('账户', style: AppText.pageTitle),
-                ),
-                const SizedBox(height: 2),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('还没有账户', style: AppText.pageSubtitle),
-                ),
-              ],
-              Expanded(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 40),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 76,
-                          height: 76,
-                          decoration: BoxDecoration(
-                            color: AppColors.primarySoft,
-                            borderRadius: BorderRadius.circular(26),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.page,
+              AppSpacing.lg,
+              AppSpacing.page,
+              24,
+            ),
+            child: Column(
+              children: [
+                if (asRoot) ...[
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('账户', style: AppText.pageTitle),
+                  ),
+                  const SizedBox(height: 2),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('还没有账户', style: AppText.pageSubtitle),
+                  ),
+                ],
+                Expanded(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 40),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 76,
+                            height: 76,
+                            decoration: BoxDecoration(
+                              color: AppColors.primarySoft,
+                              borderRadius: BorderRadius.circular(26),
+                            ),
+                            child: const Icon(
+                              Icons.person_outline_rounded,
+                              size: 34,
+                              color: AppColors.primary,
+                            ),
                           ),
-                          child: const Icon(
-                            Icons.person_outline_rounded,
-                            size: 34,
-                            color: AppColors.primary,
+                          const SizedBox(height: 18),
+                          const Text('还没有账户', style: AppText.emptyTitle),
+                          const SizedBox(height: AppSpacing.sm),
+                          const Text(
+                            '添加第一个 Foxel 服务器\n即可开始管理文件',
+                            textAlign: TextAlign.center,
+                            style: AppText.emptyBody,
                           ),
-                        ),
-                        const SizedBox(height: 18),
-                        const Text('还没有账户', style: AppText.emptyTitle),
-                        const SizedBox(height: AppSpacing.sm),
-                        const Text(
-                          '添加第一个 Foxel 服务器\n即可开始管理文件',
-                          textAlign: TextAlign.center,
-                          style: AppText.emptyBody,
-                        ),
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: 230,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              FilledButton(
-                                onPressed: onAddManually,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: AppSpacing.lg,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(
-                                      AppRadii.tile,
+                          const SizedBox(height: 24),
+                          SizedBox(
+                            width: 230,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                FilledButton(
+                                  onPressed: onAddManually,
+                                  child: const Text('添加账户'),
+                                ),
+                                const SizedBox(height: 10),
+                                OutlinedButton(
+                                  onPressed: onAddByQr,
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.ink,
+                                    side: const BorderSide(
+                                      color: AppColors.border,
                                     ),
                                   ),
+                                  child: const Text('扫码添加'),
                                 ),
-                                child: const Text(
-                                  '添加账户',
-                                  style: AppText.button,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              OutlinedButton(
-                                onPressed: onAddByQr,
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppColors.ink,
-                                  side: const BorderSide(
-                                    color: AppColors.border,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: AppSpacing.lg,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(
-                                      AppRadii.tile,
-                                    ),
-                                  ),
-                                ),
-                                child: const Text(
-                                  '扫码添加',
-                                  style: AppText.button,
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
           ),
         ),
       ),
@@ -303,11 +428,13 @@ class _CurrentAccountCard extends StatelessWidget {
   const _CurrentAccountCard({
     required this.account,
     required this.runningTasks,
+    required this.editing,
     required this.onEdit,
   });
 
   final Account account;
   final int runningTasks;
+  final bool editing;
   final VoidCallback onEdit;
 
   @override
@@ -379,38 +506,39 @@ class _CurrentAccountCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.lg),
           Row(
             children: [
-              _StatChip(
-                label: '传输中',
-                value: '$runningTasks',
-                color: color,
-              ),
+              _StatChip(label: '传输中', value: '$runningTasks', color: color),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: _StatChip(
                   label: '上次使用',
-                  value: _formatLastUsed(account.lastUsedAt),
+                  value: formatLastUsed(account.lastUsedAt),
                   color: AppColors.ink3,
                 ),
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: onEdit,
-              icon: const Icon(Icons.tune_rounded, size: 18),
-              label: const Text('编辑账户信息', style: AppText.button),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.ink,
-                side: const BorderSide(color: AppColors.border),
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadii.tile),
+          if (editing)
+            const Text('多选模式：当前账户不会被删除', style: AppText.itemHint)
+          else
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onEdit,
+                icon: const Icon(Icons.tune_rounded, size: 18),
+                label: const Text('编辑账户信息'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.ink,
+                  side: const BorderSide(color: AppColors.border),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: AppSpacing.md,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadii.tile),
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -433,7 +561,7 @@ class _StatChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FC),
+        color: AppColors.background,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -463,6 +591,8 @@ class _AccountTile extends StatelessWidget {
   const _AccountTile({
     required this.account,
     required this.runningTasks,
+    required this.editing,
+    required this.selected,
     required this.onTap,
     required this.onEdit,
     required this.onRemove,
@@ -470,6 +600,8 @@ class _AccountTile extends StatelessWidget {
 
   final Account account;
   final int runningTasks;
+  final bool editing;
+  final bool selected;
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onRemove;
@@ -481,10 +613,15 @@ class _AccountTile extends StatelessWidget {
         horizontal: AppSpacing.lg,
         vertical: 2,
       ),
-      leading: AccountAvatar(
-        account: account,
-        size: 40,
-        radius: AppRadii.avatar,
+      leading: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (editing) ...[
+            _CheckBox(checked: selected),
+            const SizedBox(width: AppSpacing.md),
+          ],
+          AccountAvatar(account: account, size: 40, radius: AppRadii.avatar),
+        ],
       ),
       title: Text(
         account.displayName,
@@ -493,37 +630,66 @@ class _AccountTile extends StatelessWidget {
         style: AppText.itemTitle,
       ),
       subtitle: Text(
-        '${account.hostLabel} · ${_formatLastUsed(account.lastUsedAt)}',
+        '${account.hostLabel} · ${formatLastUsed(account.lastUsedAt)}',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: AppText.itemSubtitle.copyWith(
           color: account.isStale ? AppColors.warn : AppColors.ink3,
         ),
       ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (account.isStale)
-            const _Tag(text: '失效', color: AppColors.warn)
-          else if (runningTasks > 0)
-            _Tag(text: '$runningTasks 传输', color: AppColors.ink3),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert_rounded, size: 20),
-            onSelected: (value) {
-              if (value == 'edit') {
-                onEdit();
-              } else if (value == 'remove') {
-                onRemove();
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'edit', child: Text('编辑账户')),
-              PopupMenuItem(value: 'remove', child: Text('移除账户')),
-            ],
-          ),
-        ],
-      ),
+      trailing: editing
+          ? null
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (account.isStale)
+                  const _Tag(text: '失效', color: AppColors.warn)
+                else if (runningTasks > 0)
+                  _Tag(text: '$runningTasks 传输', color: AppColors.ink3),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert_rounded, size: 20),
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      onEdit();
+                    } else if (value == 'remove') {
+                      onRemove();
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'edit', child: Text('编辑账户')),
+                    PopupMenuItem(value: 'remove', child: Text('移除账户')),
+                  ],
+                ),
+              ],
+            ),
+      tileColor: editing && selected
+          ? AppColors.primarySoft.withValues(alpha: 0.55)
+          : null,
       onTap: onTap,
+    );
+  }
+}
+
+class _CheckBox extends StatelessWidget {
+  const _CheckBox({required this.checked});
+
+  final bool checked;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: checked ? AppColors.primary : Colors.transparent,
+        border: checked
+            ? null
+            : Border.all(color: const Color(0xFFC6CFDD), width: 2),
+      ),
+      child: checked
+          ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
+          : null,
     );
   }
 }
@@ -584,7 +750,7 @@ class _EmptyHint extends StatelessWidget {
   }
 }
 
-String _formatLastUsed(DateTime? time) {
+String formatLastUsed(DateTime? time) {
   if (time == null) {
     return '从未使用';
   }

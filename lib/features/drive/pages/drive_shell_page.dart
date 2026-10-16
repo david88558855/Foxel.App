@@ -16,7 +16,6 @@ class DriveShellPage extends StatefulWidget {
     required this.account,
     required this.accountCount,
     required this.taskController,
-    required this.switching,
     required this.onOpenAccountCenter,
     required this.onAddAccount,
     required this.onClearLocalData,
@@ -28,7 +27,6 @@ class DriveShellPage extends StatefulWidget {
   final Account account;
   final int accountCount;
   final TransferTaskController taskController;
-  final bool switching;
 
   /// 打开「账户管理」页（独立二级页）。
   final VoidCallback onOpenAccountCenter;
@@ -84,15 +82,22 @@ class DriveShellPageState extends State<DriveShellPage> {
 
   Widget _buildTab(int index) {
     return switch (index) {
+      // 以账户 ID 作为 key：切换账户时强制重建页面 State，
+      // 否则会复用旧 State 继续显示上一个账户的目录与列表数据。
       0 => FileBrowserPage(
+        key: ValueKey<String>('files-${widget.account.id}'),
         api: widget.api,
         taskController: widget.taskController,
         account: widget.account,
         onOpenTasks: () => _selectIndex(1),
         onOpenAccountCenter: widget.onOpenAccountCenter,
       ),
-      1 => TransferTasksPage(controller: widget.taskController),
+      1 => TransferTasksPage(
+        key: ValueKey<String>('tasks-${widget.account.id}'),
+        controller: widget.taskController,
+      ),
       _ => SettingsPage(
+        key: ValueKey<String>('settings-${widget.account.id}'),
         account: widget.account,
         accountCount: widget.accountCount,
         onOpenAccountCenter: widget.onOpenAccountCenter,

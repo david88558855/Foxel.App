@@ -183,10 +183,10 @@ class _SettingsPageState extends State<SettingsPage> {
     final current =
         _downloadDir ?? await DownloadDirStore.currentDirFor(account.id);
     final defaultDir = await DownloadDirStore.defaultDirFor(account.id);
-    final controller = TextEditingController(text: current);
     if (!mounted) {
       return;
     }
+    final controller = TextEditingController(text: current);
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -304,7 +304,9 @@ class _SettingsPageState extends State<SettingsPage> {
           return;
         }
       }
-      _showMessage('该目录不可写入：$path');
+      if (mounted) {
+        _showMessage('该目录不可写入：$path');
+      }
       return;
     }
 

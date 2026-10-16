@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 
 import 'package:foxel/core/api/foxel_api.dart';
 import 'package:foxel/core/models/account.dart';
+import 'package:foxel/core/models/accounts_snapshot.dart';
 import 'package:foxel/core/models/session.dart';
+import 'package:foxel/core/theme/design_tokens.dart';
 import 'package:foxel/core/platform/portable_path_provider.dart';
 import 'package:foxel/core/storage/account_store.dart';
 import 'package:foxel/features/accounts/pages/account_center_page.dart';
@@ -29,6 +31,10 @@ class _AppRootState extends State<AppRoot> {
   final _taskControllers = <String, TransferTaskController>{};
   final _shellKey = GlobalKey<DriveShellPageState>();
 
+  /// 账户状态通知源：让 push 出来的账户管理页也能实时刷新
+  /// （push 的路由不会随 AppRoot 重建）。
+  final _snapshot = ValueNotifier<AccountsSnapshot>(AccountsSnapshot.empty);
+
   List<Account> _accounts = <Account>[];
   Account? _active;
   FoxelApi? _api;
@@ -50,39 +56,50 @@ class _AppRootState extends State<AppRoot> {
     for (final controller in _taskControllers.values) {
       controller.dispose();
     }
+    _snapshot.dispose();
     super.dispose();
   }
 
   Future<void> _bootstrap() async {
-    final accounts = await _store.loadAccounts();
-    if (accounts.isEmpty) {
+    try {
+      final accounts = await _store.loadAccounts();
+      if (accounts.isEmpty) {
+        if (!mounted) {
+          return;
+        }
+        setState(() => _loading = false);
+        return;
+      }
+
+      var active = await _store.activeAccount() ?? accounts.first;
+      _lastBaseUrl = active.baseUrl;
+      final verified = await _verify(active);
+      if (verified != null) {
+        await _store.upsert(verified);
+        active = verified;
+      } else {
+        await _store.markStale(active.id, stale: true);
+        active = active.copyWith(isStale: true);
+      }
+
+      await _reload();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _active = active;
+        _api = FoxelApi(baseUrl: active.baseUrl, token: active.token);
+        _loading = false;
+      });
+      _publishAccounts();
+    } catch (error) {
+      // 存储不可用（例如便携目录不可写）时也要退出加载态，避免白屏卡死。
       if (!mounted) {
         return;
       }
       setState(() => _loading = false);
-      return;
+      _showMessage('初始化账户数据失败：$error');
     }
-
-    var active = await _store.activeAccount() ?? accounts.first;
-    _lastBaseUrl = active.baseUrl;
-    final verified = await _verify(active);
-    if (verified != null) {
-      await _store.upsert(verified);
-      active = verified;
-    } else {
-      await _store.markStale(active.id, stale: true);
-      active = active.copyWith(isStale: true);
-    }
-
-    _accounts = await _store.loadAccounts();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _active = active;
-      _api = FoxelApi(baseUrl: active.baseUrl, token: active.token);
-      _loading = false;
-    });
   }
 
   /// 校验账户凭证，成功返回刷新后的账户，失败返回 null。
@@ -108,10 +125,23 @@ class _AppRootState extends State<AppRoot> {
 
   Future<void> _reload() async {
     _accounts = await _store.loadAccounts();
+    _publishAccounts();
+  }
+
+  /// 推送最新账户状态（账户管理页订阅此通知）。
+  void _publishAccounts() {
+    _snapshot.value = AccountsSnapshot(
+      accounts: List<Account>.unmodifiable(_accounts),
+      activeId: _active?.id,
+      runningTaskCounts: _runningTaskCounts(),
+    );
   }
 
   /// 切换到目标账户：校验 → 中断旧账户任务 → 换指针 → 重建界面。
   Future<void> _switchTo(String accountId) async {
+    if (_switching) {
+      return;
+    }
     final current = _active;
     if (current != null && current.id == accountId) {
       return;
@@ -135,6 +165,9 @@ class _AppRootState extends State<AppRoot> {
     if (verified == null) {
       await _store.markStale(target.id, stale: true);
       await _reload();
+      if (!mounted) {
+        return;
+      }
       setState(() => _switching = false);
       _showMessage('「${target.displayName}」登录已失效，请重新验证');
       return;
@@ -159,6 +192,7 @@ class _AppRootState extends State<AppRoot> {
       _api = FoxelApi(baseUrl: verified.baseUrl, token: verified.token);
       _switching = false;
     });
+    _publishAccounts();
     _showMessage('已切换到「${verified.displayName}」，数据与其他账户隔离');
   }
 
@@ -167,15 +201,13 @@ class _AppRootState extends State<AppRoot> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => AccountCenterPage(
-          accounts: _accounts,
-          activeId: _active?.id,
-          runningTaskCounts: _runningTaskCounts(),
+          snapshot: _snapshot,
           onSwitchAccount: _switchFromAccountCenter,
           onAddAccount: _openAddAccount,
           onAddManually: _openManualAdd,
           onAddByQr: _openQrAdd,
           onEditAccount: _openEditAccount,
-          onRemoveAccount: _confirmRemove,
+          onRemoveAccounts: _confirmRemoveAccounts,
         ),
       ),
     );
@@ -259,7 +291,7 @@ class _AppRootState extends State<AppRoot> {
         builder: (_) => LoginPage(
           initialBaseUrl: _lastBaseUrl,
           onLoggedIn: (session) {
-            _handleNewSession(session);
+            unawaited(_handleNewSession(session));
             Navigator.of(context).pop();
           },
         ),
@@ -349,6 +381,7 @@ class _AppRootState extends State<AppRoot> {
                 _lastBaseUrl = updated.baseUrl;
               }
             });
+            _publishAccounts();
             _showMessage('已保存「${updated.displayName}」');
           },
           onLogout: () async {
@@ -361,8 +394,15 @@ class _AppRootState extends State<AppRoot> {
             setState(() {
               if (_active?.id == account.id) {
                 _active = _active?.copyWith(token: '', isStale: true);
+                // 凭证已清空：必须重建客户端，否则界面仍在用旧 token 请求。
+                _api?.close();
+                _api = FoxelApi(
+                  baseUrl: _active?.baseUrl ?? account.baseUrl,
+                  token: '',
+                );
               }
             });
+            _publishAccounts();
             _showMessage('已退出「${account.displayName}」，可重新验证');
           },
         ),
@@ -370,19 +410,29 @@ class _AppRootState extends State<AppRoot> {
     );
   }
 
-  /// 移除账户；返回 true 表示已删除。
+  /// 批量移除账户（单个删除也走这里）；返回 true 表示已删除。
   ///
-  /// 删除当前账户时立即退出其登录态：切到剩余的账户，没有则回到空态，
+  /// 删除当前账户时立即退出其登录态：切到剩余账户，没有则回到空态，
   /// 校验放到后台进行，避免界面停留在已删除的账户上。
-  Future<bool> _confirmRemove(Account account) async {
+  Future<bool> _confirmRemoveAccounts(List<Account> accounts) async {
+    if (accounts.isEmpty) {
+      return false;
+    }
+    final isBatch = accounts.length > 1;
+    final names = accounts.map((item) => '「${item.displayName}」').join('、');
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: Text('移除账户「${account.displayName}」？'),
-          content: const Text(
-            '将删除该账户在本机的登录凭证、下载目录配置、传输记录与缓存。'
-            '服务器上的文件不受影响。',
+          title: Text(
+            isBatch
+                ? '删除 ${accounts.length} 个账户？'
+                : '移除账户${names}？',
+          ),
+          content: Text(
+            '将删除 $names 的登录状态、下载目录配置、传输记录与本地缓存。\n'
+            '服务器上的文件不受影响，此操作不可撤销。',
           ),
           actions: [
             TextButton(
@@ -390,8 +440,12 @@ class _AppRootState extends State<AppRoot> {
               child: const Text('取消'),
             ),
             FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.danger,
+                foregroundColor: Colors.white,
+              ),
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('移除'),
+              child: Text(isBatch ? '删除 ${accounts.length} 项' : '移除'),
             ),
           ],
         );
@@ -401,40 +455,50 @@ class _AppRootState extends State<AppRoot> {
       return false;
     }
 
-    final wasActive = _active?.id == account.id;
+    final ids = accounts.map((item) => item.id).toList();
+    final removingActive = ids.contains(_active?.id);
 
-    // 1) 清除存储中的账户与其沙箱数据
-    await _store.remove(account.id);
-    // 2) 释放该账户的传输任务
-    _taskControllers.remove(account.id)?.dispose();
+    // 1) 清除存储中的账户与其沙箱数据（串行执行，避免索引互相覆盖）
+    await _store.removeAll(ids);
+    // 2) 释放这些账户的传输任务
+    for (final id in ids) {
+      _taskControllers.remove(id)?.dispose();
+    }
     await _reload();
 
     if (!mounted) {
       return true;
     }
 
-    if (!wasActive) {
+    final summary = isBatch ? '已删除 ${accounts.length} 个账户' : '已移除$names';
+
+    if (!removingActive) {
       setState(() {});
-      _showMessage('已移除「${account.displayName}」');
+      _publishAccounts();
+      _showMessage(summary);
       return true;
     }
 
-    // 3) 删除的是当前账户：立刻离开其登录态
+    // 3) 当前账户被删除：立刻离开其登录态
     _api?.close();
     final next = await _store.activeAccount();
+    if (!mounted) {
+      return true;
+    }
     setState(() {
       _active = next;
       _api = next == null
           ? null
           : FoxelApi(baseUrl: next.baseUrl, token: next.token);
     });
+    _publishAccounts();
 
     if (next == null) {
-      _showMessage('已移除「${account.displayName}」');
+      _showMessage(summary);
       return true;
     }
 
-    _showMessage('已移除「${account.displayName}」，已切换到「${next.displayName}」');
+    _showMessage('$summary，已切换到「${next.displayName}」');
     unawaited(_validateActive());
     return true;
   }
@@ -462,6 +526,7 @@ class _AppRootState extends State<AppRoot> {
           _api = FoxelApi(baseUrl: verified.baseUrl, token: verified.token);
         }
       });
+      _publishAccounts();
       return;
     }
     await _store.markStale(current.id, stale: true);
@@ -474,6 +539,7 @@ class _AppRootState extends State<AppRoot> {
         _active = _active?.copyWith(isStale: true);
       }
     });
+    _publishAccounts();
   }
 
   Future<void> _confirmClearLocalData(Account account) async {
@@ -527,15 +593,13 @@ class _AppRootState extends State<AppRoot> {
     if (active == null || api == null) {
       // 无账户：直接呈现账户管理页的唯一空态，不显示登录页与底部导航。
       return AccountCenterPage(
-        accounts: const <Account>[],
-        activeId: null,
-        runningTaskCounts: const <String, int>{},
+        snapshot: _snapshot,
         onSwitchAccount: (_) async => false,
         onAddAccount: _openAddAccount,
         onAddManually: _openManualAdd,
         onAddByQr: _openQrAdd,
         onEditAccount: (_) {},
-        onRemoveAccount: (_) async => false,
+        onRemoveAccounts: (_) async => false,
         asRoot: true,
       );
     }
@@ -548,7 +612,6 @@ class _AppRootState extends State<AppRoot> {
           account: active,
           accountCount: _accounts.length,
           taskController: _controllerFor(active.id),
-          switching: _switching,
           onOpenAccountCenter: _openAccountCenter,
           onAddAccount: _openAddAccount,
           onClearLocalData: _confirmClearLocalData,

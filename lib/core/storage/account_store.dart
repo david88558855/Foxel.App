@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -29,6 +30,22 @@ class AccountStore {
 
   static String tokenKey(String accountId) => 'foxel_acc_${accountId}_token';
 
+  /// 索引读写队列：所有「读索引 → 改 → 写回」串行执行，
+  /// 避免切换账户、后台校验、删除账户交错时互相覆盖导致账户丢失。
+  Future<void> _queue = Future<void>.value();
+
+  Future<T> _serialized<T>(Future<T> Function() action) {
+    final completer = Completer<T>();
+    _queue = _queue.then((_) async {
+      try {
+        completer.complete(await action());
+      } catch (error, stack) {
+        completer.completeError(error, stack);
+      }
+    });
+    return completer.future;
+  }
+
   /// 读取全部账户，必要时执行一次旧版本迁移。
   ///
   /// 迁移判据：**索引 key 不存在**（真正的旧版本升级）才迁移。
@@ -41,26 +58,34 @@ class AccountStore {
     final accounts = <Account>[];
 
     if (raw != null && raw.isNotEmpty) {
+      dynamic decoded;
       try {
-        final decoded = jsonDecode(raw);
-        if (decoded is List) {
-          for (final item in decoded) {
-            if (item is Map<String, dynamic>) {
-              final id = item['id'] as String? ?? '';
-              if (id.isEmpty) {
-                continue;
-              }
-              accounts.add(
-                Account.fromJson(
-                  item,
-                  token: prefs.getString(tokenKey(id)) ?? '',
-                ),
-              );
+        decoded = jsonDecode(raw);
+      } catch (_) {
+        // 索引整体损坏：按空列表处理，避免应用无法启动。
+        decoded = null;
+      }
+      if (decoded is List) {
+        for (final item in decoded) {
+          if (item is! Map<String, dynamic>) {
+            continue;
+          }
+          // 单条损坏只跳过该条，不牵连其余账户。
+          try {
+            final id = item['id'];
+            if (id is! String || id.isEmpty) {
+              continue;
             }
+            accounts.add(
+              Account.fromJson(
+                item,
+                token: prefs.getString(tokenKey(id)) ?? '',
+              ),
+            );
+          } catch (_) {
+            continue;
           }
         }
-      } catch (_) {
-        // 索引损坏时按空列表处理，避免应用无法启动。
       }
     }
 
@@ -189,7 +214,10 @@ class AccountStore {
   }
 
   /// 新增或更新账户（token 单独存放）。
-  Future<void> upsert(Account account) async {
+  Future<void> upsert(Account account) => _serialized(() => _upsertLocked(account));
+
+  /// 已持有队列锁时使用的内部实现。
+  Future<void> _upsertLocked(Account account) async {
     final prefs = await SharedPreferences.getInstance();
     final accounts = await loadAccounts(migrate: false);
     final next = <Account>[
@@ -212,29 +240,32 @@ class AccountStore {
   }
 
   /// 记录「最后使用时间」。
-  Future<void> touch(String id) async {
+  Future<void> touch(String id) => _serialized(() async {
     final accounts = await loadAccounts(migrate: false);
     for (final account in accounts) {
       if (account.id == id) {
-        await upsert(account.copyWith(lastUsedAt: DateTime.now()));
+        await _upsertLocked(account.copyWith(lastUsedAt: DateTime.now()));
         return;
       }
     }
-  }
+  });
 
   /// 标记账户失效（token 过期等），本地沙箱数据保留。
-  Future<void> markStale(String id, {required bool stale}) async {
-    final accounts = await loadAccounts(migrate: false);
-    for (final account in accounts) {
-      if (account.id == id) {
-        await upsert(account.copyWith(isStale: stale));
-        return;
-      }
-    }
-  }
+  Future<void> markStale(String id, {required bool stale}) =>
+      _serialized(() async {
+        final accounts = await loadAccounts(migrate: false);
+        for (final account in accounts) {
+          if (account.id == id) {
+            await _upsertLocked(account.copyWith(isStale: stale));
+            return;
+          }
+        }
+      });
 
   /// 移除账户及其沙箱内的全部本地数据。
-  Future<void> remove(String id) async {
+  Future<void> remove(String id) => _serialized(() => _removeLocked(id));
+
+  Future<void> _removeLocked(String id) async {
     final prefs = await SharedPreferences.getInstance();
     final accounts = await loadAccounts(migrate: false);
     final next = <Account>[
@@ -266,8 +297,15 @@ class AccountStore {
     }
   }
 
+  /// 批量移除账户（多选删除）。
+  Future<void> removeAll(Iterable<String> ids) => _serialized(() async {
+    for (final id in ids) {
+      await _removeLocked(id);
+    }
+  });
+
   /// 清除账户的本地缓存与状态，但保留账户与登录态。
-  Future<void> clearLocalData(String id) async {
+  Future<void> clearLocalData(String id) => _serialized(() async {
     final prefs = await SharedPreferences.getInstance();
     final prefix = 'foxel_acc_${id}_';
     for (final key in prefs.getKeys().toList()) {
@@ -275,5 +313,5 @@ class AccountStore {
         await prefs.remove(key);
       }
     }
-  }
+  });
 }

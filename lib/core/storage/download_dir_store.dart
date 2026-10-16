@@ -87,8 +87,14 @@ class DownloadDirStore {
   }
 
   /// 解析账户下载目录并确保存在。
+  ///
+  /// 平台查询不到可用目录时（返回空串）抛出可读错误，避免对空路径建目录。
   static Future<Directory> resolveFor(String accountId) async {
-    final dir = Directory(await currentDirFor(accountId));
+    final path = await currentDirFor(accountId);
+    if (path.trim().isEmpty) {
+      throw const FileSystemException('无法确定下载目录，请在「设置 → 下载目录」中手动指定');
+    }
+    final dir = Directory(path);
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }

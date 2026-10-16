@@ -29,7 +29,7 @@ class AccountFormPage extends StatefulWidget {
   final Future<void> Function(Account account, {bool switchAfterAdd}) onSave;
 
   /// 编辑模式下「退出登录」：清除该账户凭证，账户转为失效状态。
-  final VoidCallback? onLogout;
+  final Future<void> Function()? onLogout;
 
   @override
   State<AccountFormPage> createState() => _AccountFormPageState();
@@ -100,21 +100,25 @@ class _AccountFormPageState extends State<AccountFormPage> {
           existing.baseUrl == normalized &&
           password.isEmpty;
 
-      FoxelApi api;
       String token;
       String resolvedUsername;
       String email;
       String avatarUrl;
 
       if (reuseToken) {
-        api = FoxelApi(baseUrl: normalized, token: existing.token);
-        final profile = await api.me();
-        token = existing.token;
-        resolvedUsername = profile.username.isEmpty
-            ? existing.username
-            : profile.username;
-        email = profile.email;
-        avatarUrl = profile.avatarUrl;
+        // 用 try/finally 保证校验失败时也关闭临时客户端，避免连接泄漏。
+        final client = FoxelApi(baseUrl: normalized, token: existing.token);
+        try {
+          final profile = await client.me();
+          token = existing.token;
+          resolvedUsername = profile.username.isEmpty
+              ? existing.username
+              : profile.username;
+          email = profile.email;
+          avatarUrl = profile.avatarUrl;
+        } finally {
+          client.close();
+        }
       } else {
         if (username.isEmpty) {
           throw const FormatException('请输入账号');
@@ -122,17 +126,20 @@ class _AccountFormPageState extends State<AccountFormPage> {
         if (password.isEmpty) {
           throw const FormatException('请输入密码');
         }
-        api = FoxelApi(baseUrl: normalized);
-        final session = await api.login(
-          username: username,
-          password: password,
-        );
-        token = session.token;
-        resolvedUsername = session.username;
-        email = session.email;
-        avatarUrl = session.avatarUrl;
+        final client = FoxelApi(baseUrl: normalized);
+        try {
+          final session = await client.login(
+            username: username,
+            password: password,
+          );
+          token = session.token;
+          resolvedUsername = session.username;
+          email = session.email;
+          avatarUrl = session.avatarUrl;
+        } finally {
+          client.close();
+        }
       }
-      api.close();
 
       final account = Account(
         id: existing?.id ?? Account.generateId(),
@@ -378,27 +385,28 @@ class _AccountFormPageState extends State<AccountFormPage> {
     bool? rememberBrowseState,
     bool? isolatedCache,
   }) {
+    // 无论新建还是编辑，都用本地 draft 驱动渲染：
+    // 编辑页拿到的 widget.account 是 push 时的快照，直接依赖它开关不会更新。
+    setState(() {
+      _pendingIsolation = _AccountIsolationDraft(
+        isolatedDownloadDir: isolatedDownloadDir ?? _isolatedDownloadDir,
+        isolatedTasks: isolatedTasks ?? _isolatedTasks,
+        rememberBrowseState: rememberBrowseState ?? _rememberBrowseState,
+        isolatedCache: isolatedCache ?? _isolatedCache,
+      );
+    });
+
     final existing = widget.account;
     if (existing == null) {
-      // 新建阶段先存在本地状态，保存时统一写入。
-      setState(() {
-        _pendingIsolation = _AccountIsolationDraft(
-          isolatedDownloadDir: isolatedDownloadDir ?? _isolatedDownloadDir,
-          isolatedTasks: isolatedTasks ?? _isolatedTasks,
-          rememberBrowseState: rememberBrowseState ?? _rememberBrowseState,
-          isolatedCache: isolatedCache ?? _isolatedCache,
-        );
-      });
       return;
     }
     final updated = existing.copyWith(
-      isolatedDownloadDir: isolatedDownloadDir,
-      isolatedTasks: isolatedTasks,
-      rememberBrowseState: rememberBrowseState,
-      isolatedCache: isolatedCache,
+      isolatedDownloadDir: _isolatedDownloadDir,
+      isolatedTasks: _isolatedTasks,
+      rememberBrowseState: _rememberBrowseState,
+      isolatedCache: _isolatedCache,
     );
     unawaited(widget.onSave(updated, switchAfterAdd: false));
-    setState(() {});
   }
 
   Future<void> _confirmLogout(BuildContext context) async {
@@ -424,10 +432,15 @@ class _AccountFormPageState extends State<AccountFormPage> {
         );
       },
     );
-    if (confirmed == true && mounted) {
-      widget.onLogout?.call();
-      Navigator.of(context).pop();
+    if (confirmed != true || !mounted) {
+      return;
     }
+    // 等凭证清理完成再返回，避免退回后仍看到「已连接」状态。
+    await widget.onLogout?.call();
+    if (!mounted) {
+      return;
+    }
+    Navigator.of(context).pop();
   }
 }
 
