@@ -117,11 +117,17 @@ class DriveShellPageState extends State<DriveShellPage> {
           Positioned(
             left: 20,
             right: 20,
-            bottom: 8,
-            child: _FloatingBottomNav(
-              currentIndex: _currentIndex,
-              onSelected: _selectIndex,
-              activeColor: Color(widget.account.colorValue),
+            bottom: 0,
+            child: SafeArea(
+              top: false,
+              // 12px 既是安全区最小间距，也为下方阴影（offset 6 + 模糊 7）留出空间，
+              // 避免阴影被屏幕底边/系统导航条裁切后形成「重叠阴影」。
+              minimum: const EdgeInsets.only(bottom: 12),
+              child: _FloatingBottomNav(
+                currentIndex: _currentIndex,
+                onSelected: _selectIndex,
+                activeColor: Color(widget.account.colorValue),
+              ),
             ),
           ),
         ],
@@ -224,59 +230,66 @@ class _FloatingBottomNav extends StatelessWidget {
     ),
   ];
 
+  /// 导航条高度：内边距 6 + 内容 62。
+  static const double navHeight = 74;
+
+  /// 内容区内边距。
+  static const double _inset = 6;
+
+  /// 相邻两个选项之间的间隔（选中胶囊左右各留一半）。
+  static const double _segmentGap = 14;
+
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: SizedBox(
-        height: 74,
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppRadii.nav),
-            border: Border.all(color: AppColors.border),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x1F8B97AA),
-                blurRadius: 20,
-                offset: Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(6),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                const segmentGap = 14.0;
-                final segmentWidth = constraints.maxWidth / _items.length;
-                return Stack(
-                  children: [
-                    AnimatedPositioned(
-                      duration: const Duration(milliseconds: 260),
-                      curve: Curves.easeOutCubic,
-                      left: segmentWidth * currentIndex + segmentGap / 2,
-                      top: 2,
-                      width: segmentWidth - segmentGap,
-                      height: constraints.maxHeight - 4,
-                      child: _SelectedNavSegment(color: activeColor),
-                    ),
-                    Row(
-                      children: [
-                        for (var index = 0; index < _items.length; index++)
-                          Expanded(
-                            child: _FloatingNavButton(
-                              item: _items[index],
-                              selected: index == currentIndex,
-                              activeColor: activeColor,
-                              onTap: () => onSelected(index),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                );
-              },
+    // SafeArea 由外层负责，这里只画胶囊本体，避免底部安全区被算进胶囊高度
+    // 而在下方留出一段透明空洞（阴影落进去就会和系统导航区叠在一起）。
+    return SizedBox(
+      height: navHeight,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadii.nav),
+          border: Border.all(color: AppColors.border),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x1A8B97AA),
+              blurRadius: 14,
+              offset: Offset(0, 6),
             ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(_inset),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final segmentWidth = constraints.maxWidth / _items.length;
+              return Stack(
+                children: [
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 260),
+                    curve: Curves.easeOutCubic,
+                    left: segmentWidth * currentIndex + _segmentGap / 2,
+                    top: 0,
+                    width: segmentWidth - _segmentGap,
+                    height: constraints.maxHeight,
+                    child: _SelectedNavSegment(color: activeColor),
+                  ),
+                  Row(
+                    children: [
+                      for (var index = 0; index < _items.length; index++)
+                        Expanded(
+                          child: _FloatingNavButton(
+                            item: _items[index],
+                            selected: index == currentIndex,
+                            activeColor: activeColor,
+                            onTap: () => onSelected(index),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -305,7 +318,8 @@ class _FloatingNavButton extends StatelessWidget {
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
-          borderRadius: BorderRadius.circular(AppRadii.nav),
+          // 与选中胶囊圆角一致，点击水波纹不会越出胶囊范围。
+          borderRadius: BorderRadius.circular(AppRadii.navSegment),
           onTap: onTap,
           child: SizedBox.expand(
             child: Column(
