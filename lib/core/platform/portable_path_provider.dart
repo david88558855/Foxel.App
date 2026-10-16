@@ -17,24 +17,26 @@ const String kPortableDataDirName = 'userdata';
 class PortableStorage {
   const PortableStorage._();
 
-  static bool _configured = false;
   static String? dataPath;
 
+  /// 幂等：只在「当前实例还不是便携实现」时替换。
+  ///
+  /// 不能用一次性布尔标志短路 —— Windows 的 dart plugin 注册会把
+  /// `PathProviderPlatform.instance` 换回系统实现，必须在每次真正读取
+  /// 存储之前重新确认（main() 与 AppRoot.initState() 各调用一次）。
   static void ensureConfigured() {
-    if (_configured || kIsWeb || !Platform.isWindows) {
+    if (kIsWeb || !Platform.isWindows) {
       return;
     }
     final current = PathProviderPlatform.instance;
     if (current is PortablePathProvider) {
       dataPath = current.dataPath;
-      _configured = true;
       return;
     }
     final executableDir = File(Platform.resolvedExecutable).parent.path;
     final provider = PortablePathProvider(executableDir, current);
     PathProviderPlatform.instance = provider;
     dataPath = provider.dataPath;
-    _configured = true;
     if (kDebugMode) {
       debugPrint('[Foxel] 便携版数据目录：${provider.dataPath}');
     }
