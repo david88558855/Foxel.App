@@ -141,8 +141,8 @@ class FoxelDriveApp extends StatelessWidget {
       ),
       // 用默认水波纹：InkSparkle 会在按压处生成带光晕的光斑，
       // 在扁平卡片与浮动导航上表现为「异常阴影」。
-      inkSplashColor: AppColors.primary.withValues(alpha: 0.10),
-      inkHighlightColor: AppColors.primary.withValues(alpha: 0.06),
+      splashColor: AppColors.primary.withValues(alpha: 0.10),
+      highlightColor: AppColors.primary.withValues(alpha: 0.06),
     );
   }
 
