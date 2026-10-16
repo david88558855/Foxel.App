@@ -171,12 +171,23 @@ flutter build windows --release         # Windows
 | 工作流 | 产出 |
 |---|---|
 | `analyze.yml` | `flutter analyze` + `flutter test`（含账户管理页组件测试） |
-| `build.yml` | Android APK（3 个 ABI）、Windows、Linux、macOS、iOS（未签名） |
+| `build.yml` | 全平台安装包；推送 `v*` 标签时自动发布到 GitHub Release |
 
-**v1.0.2 发布产物**
+**发布产物（按架构选择）**
 
-- `Foxel-windows-portable.zip` —— Windows 便携版，解压即用
-- `app-arm64-v8a-release.apk` / `app-armeabi-v7a-release.apk` / `app-x86_64-release.apk`
+| 架构 | Windows | macOS | Linux | Android | iOS |
+|---|---|---|---|---|---|
+| x86-64 (64 位) | `Foxel-windows-x86_64.zip` | — | `Foxel-linux-x86_64.tar.gz` | `Foxel-android-x86_64.apk` | — |
+| AArch64 / ARM64 | — | `Foxel-macos-arm64.zip` | — | `Foxel-android-arm64-v8a.apk` | `Foxel-ios-arm64-unsigned.ipa` |
+| ARMv7 (32 位) | — | — | — | `Foxel-android-armeabi-v7a.apk` | — |
+
+**安装说明**
+
+- **Windows**：解压 ZIP 后运行 `foxel.exe`（便携版，数据在同目录 `userdata/`）
+- **macOS**：解压 ZIP 后拖入「应用程序」；首次打开可能需在「系统设置 > 隐私与安全性」中允许
+- **Linux**：解压 TAR.GZ 后运行 `./Foxel`
+- **Android**：下载对应架构 APK 安装，多数现代设备选 `arm64-v8a`
+- **iOS**：IPA 为未签名版本，需通过 AltStore 等工具侧载
 
 ---
 
