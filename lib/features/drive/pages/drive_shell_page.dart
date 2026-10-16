@@ -5,25 +5,21 @@ import 'package:flutter/material.dart';
 
 import 'package:foxel/core/api/foxel_api.dart';
 import 'package:foxel/core/models/account.dart';
-import 'package:foxel/features/accounts/pages/account_center_page.dart';
 import 'package:foxel/features/drive/controllers/transfer_task_controller.dart';
 import 'package:foxel/features/drive/pages/file_browser_page.dart';
 import 'package:foxel/features/drive/pages/transfer_tasks_page.dart';
+import 'package:foxel/features/settings/pages/settings_page.dart';
 
 class DriveShellPage extends StatefulWidget {
   const DriveShellPage({
     super.key,
     required this.api,
     required this.account,
-    required this.accounts,
+    required this.accountCount,
     required this.taskController,
-    required this.runningTaskCounts,
     required this.switching,
-    required this.onSwitchAccount,
-    required this.onOpenSwitcher,
+    required this.onOpenAccountCenter,
     required this.onAddAccount,
-    required this.onEditAccount,
-    required this.onRemoveAccount,
     required this.onClearLocalData,
   });
 
@@ -31,23 +27,20 @@ class DriveShellPage extends StatefulWidget {
 
   /// 当前账户（同时决定界面主题色）。
   final Account account;
-  final List<Account> accounts;
+  final int accountCount;
   final TransferTaskController taskController;
-  final Map<String, int> runningTaskCounts;
   final bool switching;
 
-  final ValueChanged<Account> onSwitchAccount;
-  final VoidCallback onOpenSwitcher;
+  /// 打开「账户管理」页（独立二级页）。
+  final VoidCallback onOpenAccountCenter;
   final VoidCallback onAddAccount;
-  final ValueChanged<Account> onEditAccount;
-  final ValueChanged<Account> onRemoveAccount;
   final ValueChanged<Account> onClearLocalData;
 
   @override
-  State<DriveShellPage> createState() => _DriveShellPageState();
+  State<DriveShellPage> createState() => DriveShellPageState();
 }
 
-class _DriveShellPageState extends State<DriveShellPage> {
+class DriveShellPageState extends State<DriveShellPage> {
   int _currentIndex = 0;
   int _previousIndex = 0;
   final Set<int> _visitedIndexes = {0};
@@ -75,6 +68,9 @@ class _DriveShellPageState extends State<DriveShellPage> {
     }
   }
 
+  /// 供外部（如切换账户后）切换底部导航页签。
+  void selectTab(int index) => _selectIndex(index);
+
   void _selectIndex(int index) {
     if (index == _currentIndex) {
       return;
@@ -94,19 +90,15 @@ class _DriveShellPageState extends State<DriveShellPage> {
         taskController: widget.taskController,
         account: widget.account,
         onOpenTasks: () => _selectIndex(1),
-        onOpenSwitcher: widget.onOpenSwitcher,
+        onOpenAccountCenter: widget.onOpenAccountCenter,
       ),
       1 => TransferTasksPage(controller: widget.taskController),
-      _ => AccountCenterPage(
-        accounts: widget.accounts,
-        activeId: widget.account.id,
-        runningTaskCounts: widget.runningTaskCounts,
-        onSwitchAccount: widget.onSwitchAccount,
+      _ => SettingsPage(
+        account: widget.account,
+        accountCount: widget.accountCount,
+        onOpenAccountCenter: widget.onOpenAccountCenter,
         onAddAccount: widget.onAddAccount,
-        onEditAccount: widget.onEditAccount,
-        onRemoveAccount: widget.onRemoveAccount,
         onClearLocalData: widget.onClearLocalData,
-        onOpenSwitcher: widget.onOpenSwitcher,
       ),
     };
   }
@@ -227,9 +219,9 @@ class _FloatingBottomNav extends StatelessWidget {
       selectedIcon: CupertinoIcons.tray_fill,
     ),
     _NavItem(
-      label: '账户',
-      icon: CupertinoIcons.person,
-      selectedIcon: CupertinoIcons.person_solid,
+      label: '设置',
+      icon: CupertinoIcons.gear_alt,
+      selectedIcon: CupertinoIcons.gear_alt_fill,
     ),
   ];
 

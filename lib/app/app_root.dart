@@ -4,9 +4,9 @@ import 'package:foxel/core/api/foxel_api.dart';
 import 'package:foxel/core/models/account.dart';
 import 'package:foxel/core/models/session.dart';
 import 'package:foxel/core/storage/account_store.dart';
+import 'package:foxel/features/accounts/pages/account_center_page.dart';
 import 'package:foxel/features/accounts/pages/account_form_page.dart';
-import 'package:foxel/features/accounts/widgets/account_switcher.dart';
-import 'package:foxel/features/auth/pages/settings_page.dart';
+import 'package:foxel/features/auth/pages/login_page.dart';
 import 'package:foxel/features/drive/controllers/transfer_task_controller.dart';
 import 'package:foxel/features/drive/pages/drive_shell_page.dart';
 
@@ -24,6 +24,7 @@ class AppRoot extends StatefulWidget {
 class _AppRootState extends State<AppRoot> {
   final _store = AccountStore();
   final _taskControllers = <String, TransferTaskController>{};
+  final _shellKey = GlobalKey<DriveShellPageState>();
 
   List<Account> _accounts = <Account>[];
   Account? _active;
@@ -156,21 +157,33 @@ class _AppRootState extends State<AppRoot> {
     _showMessage('已切换到「${verified.displayName}」，数据与其他账户隔离');
   }
 
-  Future<void> _openSwitcher() async {
-    final selected = await AccountSwitcher.show(
-      context: context,
-      accounts: _accounts,
-      activeId: _active?.id,
-      runningTaskCounts: _runningTaskCounts(),
-      onAddAccount: _openAddAccount,
-      onManageAccounts: () {
-        _showMessage('可在「账户」页管理全部账户');
-      },
+  /// 打开「账户管理」独立页（设置页内的入口）。
+  Future<void> _openAccountCenter() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => AccountCenterPage(
+          accounts: _accounts,
+          activeId: _active?.id,
+          runningTaskCounts: _runningTaskCounts(),
+          onSwitchAccount: _switchFromAccountCenter,
+          onAddAccount: _openAddAccount,
+          onAddManually: _openManualAdd,
+          onAddByQr: _openQrAdd,
+          onEditAccount: _openEditAccount,
+          onRemoveAccount: _confirmRemove,
+        ),
+      ),
     );
-    if (selected == null) {
-      return;
+  }
+
+  /// 账户管理页内点选账户：切换成功后回到主界面的「文件」页。
+  Future<bool> _switchFromAccountCenter(Account account) async {
+    await _switchTo(account.id);
+    final switched = _active?.id == account.id;
+    if (switched) {
+      _shellKey.currentState?.selectTab(0);
     }
-    await _switchTo(selected);
+    return switched;
   }
 
   Map<String, int> _runningTaskCounts() {
@@ -238,7 +251,7 @@ class _AppRootState extends State<AppRoot> {
   Future<void> _openQrAdd() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => SettingsPage(
+        builder: (_) => LoginPage(
           initialBaseUrl: _lastBaseUrl,
           onLoggedIn: (session) {
             _handleNewSession(session);
@@ -465,27 +478,32 @@ class _AppRootState extends State<AppRoot> {
     final active = _active;
     final api = _api;
     if (active == null || api == null) {
-      return SettingsPage(
-        initialBaseUrl: _lastBaseUrl,
-        onLoggedIn: (session) => _handleNewSession(session),
+      // 无账户：直接呈现账户管理页的唯一空态，不显示登录页与底部导航。
+      return AccountCenterPage(
+        accounts: const <Account>[],
+        activeId: null,
+        runningTaskCounts: const <String, int>{},
+        onSwitchAccount: (_) async => false,
+        onAddAccount: _openAddAccount,
+        onAddManually: _openManualAdd,
+        onAddByQr: _openQrAdd,
+        onEditAccount: (_) {},
+        onRemoveAccount: (_) {},
+        asRoot: true,
       );
     }
 
     return Stack(
       children: [
         DriveShellPage(
-          key: ValueKey<String>(active.id),
+          key: _shellKey,
           api: api,
           account: active,
-          accounts: _accounts,
+          accountCount: _accounts.length,
           taskController: _controllerFor(active.id),
-          runningTaskCounts: _runningTaskCounts(),
           switching: _switching,
-          onSwitchAccount: (account) => _switchTo(account.id),
-          onOpenSwitcher: _openSwitcher,
+          onOpenAccountCenter: _openAccountCenter,
           onAddAccount: _openAddAccount,
-          onEditAccount: _openEditAccount,
-          onRemoveAccount: _confirmRemove,
           onClearLocalData: _confirmClearLocalData,
         ),
         if (_switching)

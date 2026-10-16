@@ -26,14 +26,16 @@ class FileBrowserPage extends StatefulWidget {
     required this.taskController,
     required this.account,
     required this.onOpenTasks,
-    required this.onOpenSwitcher,
+    required this.onOpenAccountCenter,
   });
 
   final FoxelApi api;
   final TransferTaskController taskController;
   final Account account;
   final VoidCallback onOpenTasks;
-  final VoidCallback onOpenSwitcher;
+
+  /// 点击顶部账户条 → 打开账户管理页。
+  final VoidCallback onOpenAccountCenter;
 
   @override
   State<FileBrowserPage> createState() => _FileBrowserPageState();
@@ -664,7 +666,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                 children: [
                   _AccountBar(
                     account: widget.account,
-                    onTap: widget.onOpenSwitcher,
+                    onTap: widget.onOpenAccountCenter,
                   ),
                   _Toolbar(
                     controller: _searchController,
@@ -1839,7 +1841,7 @@ class _EmptyView extends StatelessWidget {
   }
 }
 
-/// 顶部「当前账户」条：任何时候都知道自己在哪个账户里，点击即切换。
+/// 顶部「当前账户」条：仅作标识，点击进入账户管理页（切换在账户管理页内完成）。
 class _AccountBar extends StatelessWidget {
   const _AccountBar({required this.account, required this.onTap});
 
@@ -1870,7 +1872,6 @@ class _AccountBar extends StatelessWidget {
                 ),
               ),
             ),
-            Icon(Icons.expand_more_rounded, size: 16, color: color),
             const Spacer(),
             if (account.isStale)
               Container(
@@ -1900,6 +1901,8 @@ class _AccountBar extends StatelessWidget {
                   color: color.withValues(alpha: 0.75),
                 ),
               ),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right_rounded, size: 18, color: color),
           ],
         ),
       ),

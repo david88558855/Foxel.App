@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 
 import 'package:foxel/core/models/account.dart';
-import 'package:foxel/core/storage/download_dir_store.dart';
 import 'package:foxel/features/accounts/widgets/account_avatar.dart';
 
-/// 账户中心：当前账户卡 + 其他账户列表 + 数据隔离概览 + 本账户设置。
-class AccountCenterPage extends StatefulWidget {
+/// 账户管理页。
+///
+/// - 有账户时：从「设置 → 账户管理」进入的独立二级页（AppBar 返回 + 右上「+」），
+///   点击列表项即切换账户。
+/// - 无账户时：作为启动首页呈现唯一空态（居中引导 + 添加账户 / 扫码添加），
+///   此时不显示返回按钮与底部导航。
+class AccountCenterPage extends StatelessWidget {
   const AccountCenterPage({
     super.key,
     required this.accounts,
@@ -13,273 +17,248 @@ class AccountCenterPage extends StatefulWidget {
     required this.runningTaskCounts,
     required this.onSwitchAccount,
     required this.onAddAccount,
+    required this.onAddManually,
+    required this.onAddByQr,
     required this.onEditAccount,
     required this.onRemoveAccount,
-    required this.onClearLocalData,
-    required this.onOpenSwitcher,
+    this.asRoot = false,
   });
 
   final List<Account> accounts;
   final String? activeId;
   final Map<String, int> runningTaskCounts;
-  final ValueChanged<Account> onSwitchAccount;
+
+  /// 切换账户；返回 true 表示切换成功。
+  final Future<bool> Function(Account account) onSwitchAccount;
+
+  /// 打开「添加账户」方式选择（手动 / 扫码）。
   final VoidCallback onAddAccount;
+  final VoidCallback onAddManually;
+  final VoidCallback onAddByQr;
   final ValueChanged<Account> onEditAccount;
   final ValueChanged<Account> onRemoveAccount;
-  final ValueChanged<Account> onClearLocalData;
-  final VoidCallback onOpenSwitcher;
 
-  @override
-  State<AccountCenterPage> createState() => _AccountCenterPageState();
-}
-
-class _AccountCenterPageState extends State<AccountCenterPage> {
-  String? _downloadDir;
+  /// 无账户启动时以根页面形态呈现。
+  final bool asRoot;
 
   Account? get _active {
-    final id = widget.activeId;
-    for (final account in widget.accounts) {
+    final id = activeId;
+    for (final account in accounts) {
       if (account.id == id) {
         return account;
       }
     }
-    return widget.accounts.isEmpty ? null : widget.accounts.first;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadDownloadDir();
-  }
-
-  @override
-  void didUpdateWidget(covariant AccountCenterPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.activeId != widget.activeId) {
-      _loadDownloadDir();
-    }
-  }
-
-  Future<void> _loadDownloadDir() async {
-    final active = _active;
-    if (active == null) {
-      return;
-    }
-    final dir = await DownloadDirStore.currentDirFor(active.id);
-    if (mounted) {
-      setState(() => _downloadDir = dir);
-    }
+    return accounts.isEmpty ? null : accounts.first;
   }
 
   @override
   Widget build(BuildContext context) {
     final active = _active;
+    if (active == null) {
+      return _EmptyState(
+        asRoot: asRoot,
+        onAddManually: onAddManually,
+        onAddByQr: onAddByQr,
+      );
+    }
+
     final others = <Account>[
-      for (final account in widget.accounts) if (account.id != active?.id) account,
+      for (final account in accounts)
+        if (account.id != active.id) account,
     ];
+
+    final body = ListView(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 32),
+      children: [
+        _CurrentAccountCard(
+          account: active,
+          runningTasks: runningTaskCounts[active.id] ?? 0,
+          onEdit: () => onEditAccount(active),
+        ),
+        const SizedBox(height: 16),
+        _SectionLabel(
+          text: others.isEmpty ? '其他账户' : '其他账户 · 点选即切换 (${others.length})',
+        ),
+        const SizedBox(height: 8),
+        if (others.isEmpty)
+          const _EmptyHint(text: '还没有其他账户，添加后可在这里切换')
+        else
+          _Group(
+            children: [
+              for (final account in others)
+                _AccountTile(
+                  account: account,
+                  runningTasks: runningTaskCounts[account.id] ?? 0,
+                  onTap: () => _handleSwitch(context, account),
+                  onEdit: () => onEditAccount(account),
+                  onRemove: () => onRemoveAccount(account),
+                ),
+            ],
+          ),
+        const SizedBox(height: 14),
+        OutlinedButton.icon(
+          onPressed: onAddAccount,
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('添加账户'),
+        ),
+        const SizedBox(height: 10),
+        const Text(
+          '点选账户即切换；切换后本账户的下载目录、任务与缓存与其他账户互相隔离。',
+          style: TextStyle(
+            fontSize: 11.5,
+            color: Color(0xFF93A0AF),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+
+    if (asRoot) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF4F7FA),
+        body: SafeArea(child: body),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F7FA),
+      appBar: AppBar(
+        title: const Text('账户管理'),
+        backgroundColor: const Color(0xFFF4F7FA),
+        actions: [
+          IconButton(
+            onPressed: onAddAccount,
+            icon: const Icon(Icons.add_rounded),
+            tooltip: '添加账户',
+          ),
+        ],
+      ),
+      body: SafeArea(top: false, child: body),
+    );
+  }
+
+  Future<void> _handleSwitch(BuildContext context, Account account) async {
+    final ok = await onSwitchAccount(account);
+    if (!ok || !context.mounted) {
+      return;
+    }
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
+  }
+}
+
+/// 唯一空态：无账户时的启动页与账户管理页空态。
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({
+    required this.asRoot,
+    required this.onAddManually,
+    required this.onAddByQr,
+  });
+
+  final bool asRoot;
+  final VoidCallback onAddManually;
+  final VoidCallback onAddByQr;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Column(
+      children: [
+        if (asRoot) ...[
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '账户',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+            ),
+          ),
+          const SizedBox(height: 2),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '还没有账户',
+              style: TextStyle(
+                fontSize: 12,
+                color: Color(0xFF93A0AF),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+        Expanded(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 40),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 76,
+                    height: 76,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEAF0FF),
+                      borderRadius: BorderRadius.circular(26),
+                    ),
+                    child: const Icon(
+                      Icons.person_outline_rounded,
+                      size: 34,
+                      color: Color(0xFF4C6FFF),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    '还没有账户',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '添加第一个 Foxel 服务器\n即可开始管理文件',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: Color(0xFF93A0AF),
+                      height: 1.7,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: 230,
+                    child: Column(
+                      children: [
+                        FilledButton(
+                          onPressed: onAddManually,
+                          child: const Text('添加账户'),
+                        ),
+                        const SizedBox(height: 10),
+                        OutlinedButton(
+                          onPressed: onAddByQr,
+                          child: const Text('扫码添加'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FA),
       body: SafeArea(
-        bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 126),
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '账户',
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '共 ${widget.accounts.length} 个账户',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF93A0AF),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton.filledTonal(
-                  onPressed: widget.onAddAccount,
-                  icon: const Icon(Icons.add_rounded),
-                  tooltip: '添加账户',
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            if (active != null) ...[
-              _CurrentAccountCard(
-                account: active,
-                runningTasks: widget.runningTaskCounts[active.id] ?? 0,
-                onEdit: () => widget.onEditAccount(active),
-                onOpenSwitcher: widget.onOpenSwitcher,
-              ),
-              const SizedBox(height: 16),
-              _SectionLabel(text: otherLabel(others.length)),
-              const SizedBox(height: 8),
-              if (others.isEmpty)
-                const _EmptyHint(text: '还没有其他账户，添加后可一键切换')
-              else
-                _Group(
-                  children: [
-                    for (final account in others)
-                      _AccountTile(
-                        account: account,
-                        runningTasks: widget.runningTaskCounts[account.id] ?? 0,
-                        onTap: () => widget.onSwitchAccount(account),
-                        onEdit: () => widget.onEditAccount(account),
-                        onRemove: () => widget.onRemoveAccount(account),
-                        onClearLocalData: () =>
-                            widget.onClearLocalData(account),
-                      ),
-                  ],
-                ),
-              const SizedBox(height: 16),
-              _SectionLabel(text: '数据隔离'),
-              const SizedBox(height: 8),
-              _IsolationOverview(account: active),
-              const SizedBox(height: 16),
-              _SectionLabel(text: '本账户设置'),
-              const SizedBox(height: 8),
-              _Group(
-                children: [
-                  _SettingsRow(
-                    icon: Icons.folder_rounded,
-                    title: '下载目录',
-                    subtitle: _downloadDir ?? '加载中',
-                    onTap: () => _editDownloadDir(active),
-                  ),
-                  _SettingsRow(
-                    icon: Icons.add_rounded,
-                    title: '添加账户',
-                    subtitle: '手动输入或扫码登录',
-                    onTap: widget.onAddAccount,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _SectionLabel(text: '危险操作'),
-              const SizedBox(height: 8),
-              _Group(
-                children: [
-                  _SettingsRow(
-                    icon: Icons.cleaning_services_rounded,
-                    title: '清除本地数据',
-                    subtitle: '删除缓存与下载目录配置，保留账户',
-                    warning: true,
-                    onTap: () => widget.onClearLocalData(active),
-                  ),
-                  _SettingsRow(
-                    icon: Icons.person_remove_rounded,
-                    title: '移除此账户',
-                    subtitle: '本地数据与登录态一并删除',
-                    destructive: true,
-                    onTap: () => widget.onRemoveAccount(active),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 4),
-                child: Text(
-                  '移除账户不会影响服务器上的文件',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: Color(0xFF93A0AF),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ] else
-              const _EmptyHint(text: '还没有账户，点击右上角添加第一个'),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+          child: content,
         ),
       ),
     );
-  }
-
-  static String otherLabel(int count) {
-    return count == 0 ? '其他账户' : '其他账户 ($count)';
-  }
-
-  Future<void> _editDownloadDir(Account account) async {
-    final current =
-        _downloadDir ?? await DownloadDirStore.currentDirFor(account.id);
-    final defaultDir = await DownloadDirStore.defaultDirFor(account.id);
-    final controller = TextEditingController(text: current);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('下载目录'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: controller,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: '下载目录完整路径',
-                  prefixIcon: Icon(Icons.folder_rounded),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                '默认：$defaultDir',
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  color: Color(0xFF93A0AF),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                DownloadDirStore.resetDirFor(account.id);
-                Navigator.of(dialogContext).pop('');
-              },
-              child: const Text('恢复默认'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () =>
-                  Navigator.of(dialogContext).pop(controller.text),
-              child: const Text('保存'),
-            ),
-          ],
-        );
-      },
-    );
-    if (result == null) {
-      return;
-    }
-    if (result.isEmpty) {
-      await DownloadDirStore.resetDirFor(account.id);
-    } else {
-      final writable = await DownloadDirStore.isWritable(result);
-      if (!writable && mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('该目录不可写入')));
-        return;
-      }
-      await DownloadDirStore.setDirFor(account.id, result);
-    }
-    await _loadDownloadDir();
   }
 }
 
@@ -288,13 +267,11 @@ class _CurrentAccountCard extends StatelessWidget {
     required this.account,
     required this.runningTasks,
     required this.onEdit,
-    required this.onOpenSwitcher,
   });
 
   final Account account;
   final int runningTasks;
   final VoidCallback onEdit;
-  final VoidCallback onOpenSwitcher;
 
   @override
   Widget build(BuildContext context) {
@@ -389,24 +366,13 @@ class _CurrentAccountCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.tune_rounded, size: 18),
-                  label: const Text('编辑'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: onOpenSwitcher,
-                  icon: const Icon(Icons.swap_horiz_rounded, size: 18),
-                  label: const Text('切换'),
-                ),
-              ),
-            ],
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onEdit,
+              icon: const Icon(Icons.tune_rounded, size: 18),
+              label: const Text('编辑账户信息'),
+            ),
           ),
         ],
       ),
@@ -462,7 +428,6 @@ class _AccountTile extends StatelessWidget {
     required this.onTap,
     required this.onEdit,
     required this.onRemove,
-    required this.onClearLocalData,
   });
 
   final Account account;
@@ -470,7 +435,6 @@ class _AccountTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onRemove;
-  final VoidCallback onClearLocalData;
 
   @override
   Widget build(BuildContext context) {
@@ -507,15 +471,12 @@ class _AccountTile extends StatelessWidget {
             onSelected: (value) {
               if (value == 'edit') {
                 onEdit();
-              } else if (value == 'clear') {
-                onClearLocalData();
               } else if (value == 'remove') {
                 onRemove();
               }
             },
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'edit', child: Text('编辑账户')),
-              PopupMenuItem(value: 'clear', child: Text('清除本地数据')),
               PopupMenuItem(value: 'remove', child: Text('移除账户')),
             ],
           ),
@@ -548,85 +509,6 @@ class _Tag extends StatelessWidget {
           fontWeight: FontWeight.w800,
           color: color,
         ),
-      ),
-    );
-  }
-}
-
-class _IsolationOverview extends StatelessWidget {
-  const _IsolationOverview({required this.account});
-
-  final Account account;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Group(
-      children: [
-        _IsolationRow(
-          icon: Icons.key_rounded,
-          title: '登录凭证',
-          subtitle: '每个账户独立保存，互不影响',
-          enabled: true,
-        ),
-        _IsolationRow(
-          icon: Icons.folder_copy_rounded,
-          title: '下载目录',
-          subtitle: 'Foxel/${account.id}',
-          enabled: account.isolatedDownloadDir,
-        ),
-        _IsolationRow(
-          icon: Icons.sync_alt_rounded,
-          title: '传输任务',
-          subtitle: '切换账户时中断本账户任务',
-          enabled: account.isolatedTasks,
-        ),
-        _IsolationRow(
-          icon: Icons.history_rounded,
-          title: '浏览位置',
-          subtitle: '切回时恢复上次目录与排序',
-          enabled: account.rememberBrowseState,
-        ),
-        _IsolationRow(
-          icon: Icons.image_rounded,
-          title: '媒体缓存',
-          subtitle: '播放进度等随账户清理',
-          enabled: account.isolatedCache,
-        ),
-      ],
-    );
-  }
-}
-
-class _IsolationRow extends StatelessWidget {
-  const _IsolationRow({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.enabled,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14),
-      leading: Icon(icon, size: 20, color: const Color(0xFF5C6B7A)),
-      title: Text(
-        title,
-        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: const TextStyle(fontSize: 11.5, color: Color(0xFF93A0AF)),
-      ),
-      trailing: Icon(
-        enabled ? Icons.check_circle_rounded : Icons.remove_circle_outline,
-        size: 20,
-        color: enabled ? const Color(0xFF12B886) : const Color(0xFFB6C0CD),
       ),
     );
   }
@@ -669,53 +551,6 @@ class _Group extends StatelessWidget {
   }
 }
 
-class _SettingsRow extends StatelessWidget {
-  const _SettingsRow({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-    this.destructive = false,
-    this.warning = false,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-  final bool destructive;
-  final bool warning;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = destructive
-        ? const Color(0xFFE5484D)
-        : warning
-        ? const Color(0xFFF59E0B)
-        : const Color(0xFF5C6B7A);
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-      leading: Icon(icon, size: 20, color: color),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: 14.5,
-          fontWeight: FontWeight.w700,
-          color: destructive || warning ? color : const Color(0xFF16202C),
-        ),
-      ),
-      subtitle: Text(
-        subtitle,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontSize: 11.5, color: Color(0xFF93A0AF)),
-      ),
-      trailing: const Icon(Icons.chevron_right_rounded, size: 20),
-      onTap: onTap,
-    );
-  }
-}
-
 class _EmptyHint extends StatelessWidget {
   const _EmptyHint({required this.text});
 
@@ -728,7 +563,7 @@ class _EmptyHint extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE7ECF2), style: BorderStyle.solid),
+        border: Border.all(color: const Color(0xFFE7ECF2)),
       ),
       child: Row(
         children: [
