@@ -228,8 +228,8 @@ class _FloatingBottomNav extends StatelessWidget {
     ),
     _NavItem(
       label: '账户',
-      icon: CupertinoIcons.person_alt,
-      selectedIcon: CupertinoIcons.person_alt_fill,
+      icon: CupertinoIcons.person,
+      selectedIcon: CupertinoIcons.person_solid,
     ),
   ];
 
