@@ -300,8 +300,9 @@ class _AccountFormPageState extends State<AccountFormPage> {
             _IsolationSwitch(
               title: '独立下载目录',
               subtitle: _isEdit
-                  ? (_downloadDir ?? 'Foxel/${account!.id}')
-                  : '默认 Download/Foxel/<账户ID>',
+                  ? (_downloadDir ??
+                        'Foxel/${DownloadDirStore.folderNameFor(account!)}')
+                  : '默认 Download/Foxel/<显示名称，未填则用账户ID>',
               value: _isolatedDownloadDir,
               onChanged: (value) => _updateIsolation(
                 isolatedDownloadDir: value,

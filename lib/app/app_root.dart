@@ -9,6 +9,7 @@ import 'package:foxel/core/models/session.dart';
 import 'package:foxel/core/theme/design_tokens.dart';
 import 'package:foxel/core/storage/portable_prefs_store.dart';
 import 'package:foxel/core/storage/account_store.dart';
+import 'package:foxel/core/storage/download_dir_store.dart';
 import 'package:foxel/features/accounts/pages/account_center_page.dart';
 import 'package:foxel/features/accounts/pages/account_form_page.dart';
 import 'package:foxel/features/auth/pages/login_page.dart';
@@ -317,6 +318,8 @@ class _AppRootState extends State<AppRoot> {
 
     await _store.upsert(saved);
     await _reload();
+    // 新建账户的默认下载目录：优先显示名称，未填写时用账户 ID。
+    await _ensureDefaultDownloadDir(saved, isNew: existing == null);
     if (!mounted) {
       return;
     }
@@ -326,6 +329,37 @@ class _AppRootState extends State<AppRoot> {
       await _switchTo(saved.id);
     } else {
       _showMessage('已添加「${saved.displayName}」');
+    }
+  }
+
+  /// 为新账户落定默认下载目录（已有设置不覆盖，避免下载文件「搬家」）。
+  Future<void> _ensureDefaultDownloadDir(
+    Account account, {
+    required bool isNew,
+  }) async {
+    if (!isNew) {
+      return;
+    }
+    if (await DownloadDirStore.hasCustomDirFor(account.id)) {
+      return;
+    }
+    final folderName = DownloadDirStore.sanitizeFolderName(account.alias);
+    final duplicated =
+        folderName.isNotEmpty &&
+        _accounts.any(
+          (item) =>
+              item.id != account.id &&
+              DownloadDirStore.sanitizeFolderName(item.alias) == folderName,
+        );
+    final shortId = account.id.length > 6
+        ? account.id.substring(account.id.length - 6)
+        : account.id;
+    final dir = await DownloadDirStore.defaultDirForAccount(
+      account,
+      disambiguator: duplicated ? shortId : null,
+    );
+    if (dir.isNotEmpty) {
+      await DownloadDirStore.setDirFor(account.id, dir);
     }
   }
 

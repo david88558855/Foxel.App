@@ -182,7 +182,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final account = widget.account;
     final current =
         _downloadDir ?? await DownloadDirStore.currentDirFor(account.id);
-    final defaultDir = await DownloadDirStore.defaultDirFor(account.id);
+    // 默认目录优先使用显示名称（未填写时才是账户 ID）。
+    final defaultDir = await DownloadDirStore.defaultDirForAccount(account);
     if (!mounted) {
       return;
     }

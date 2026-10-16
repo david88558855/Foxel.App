@@ -323,8 +323,13 @@ class _FloatingNavButton extends StatelessWidget {
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
-          // 与选中胶囊圆角一致，点击水波纹不会越出胶囊范围。
+          // 与选中胶囊圆角一致；按压反馈完全交给胶囊动画，
+          // 禁用 splash/highlight，避免在胶囊外沿出现比胶囊更大的高亮块。
           borderRadius: BorderRadius.circular(AppRadii.navSegment),
+          splashFactory: NoSplash.splashFactory,
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          hoverColor: Colors.transparent,
           onTap: onTap,
           child: SizedBox.expand(
             child: Column(

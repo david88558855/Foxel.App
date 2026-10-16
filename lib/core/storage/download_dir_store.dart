@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:foxel/core/models/account.dart';
+
 /// 下载目录配置。
 ///
 /// Android 端默认目录固定为 /storage/emulated/0/Download/Foxel，
@@ -51,8 +53,56 @@ class DownloadDirStore {
   static String dirKeyFor(String accountId) =>
       'foxel_acc_${accountId}_download_dir';
 
-  /// 账户默认下载目录：<平台默认>/Foxel/<账户ID>。
-  static Future<String> defaultDirFor(String accountId) async {
+  /// 账户是否已有自定义（含自动生成）下载目录记录。
+  static Future<bool> hasCustomDirFor(String accountId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(dirKeyFor(accountId));
+    return saved != null && saved.trim().isNotEmpty;
+  }
+
+  /// 目录名清洗：替换各平台非法字符、压缩空白、截断超长名称。
+  static String sanitizeFolderName(String raw) {
+    var name = raw.trim();
+    if (name.isEmpty) {
+      return '';
+    }
+    // Windows / macOS / Linux 非法或易出问题的字符统一替换为下划线。
+    name = name.replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1F]'), '_');
+    name = name.replaceAll(RegExp(r'\s+'), ' ');
+    name = name.replaceAll(RegExp(r'^[.\s]+|[.\s]+$'), '');
+    if (name.length > 40) {
+      name = name.substring(0, 40).trim();
+    }
+    return name;
+  }
+
+  /// 账户对应的文件夹名：**优先显示名称**，未填写时退回账户 ID。
+  ///
+  /// [disambiguator] 用于显示名称与既有账户重复时追加短标识，避免两个账户
+  /// 共用同一个下载目录。
+  static String folderNameFor(Account account, {String? disambiguator}) {
+    final name = sanitizeFolderName(account.alias);
+    if (name.isEmpty) {
+      return account.id;
+    }
+    if (disambiguator == null || disambiguator.isEmpty) {
+      return name;
+    }
+    return '$name-$disambiguator';
+  }
+
+  /// 账户默认下载目录：`<平台默认>/Foxel/<显示名称 或 账户ID>`。
+  static Future<String> defaultDirForAccount(
+    Account account, {
+    String? disambiguator,
+  }) {
+    return _joinFoxel(folderNameFor(account, disambiguator: disambiguator));
+  }
+
+  /// 兼容旧签名（仅凭账户 ID）：`<平台默认>/Foxel/<账户ID>`。
+  static Future<String> defaultDirFor(String accountId) => _joinFoxel(accountId);
+
+  static Future<String> _joinFoxel(String folderName) async {
     final base = await defaultDir();
     if (base.isEmpty) {
       return '';
@@ -61,7 +111,10 @@ class DownloadDirStore {
     final trimmed = base.endsWith(separator)
         ? base.substring(0, base.length - separator.length)
         : base;
-    return '$trimmed${separator}Foxel$separator$accountId';
+    if (folderName.isEmpty) {
+      return '$trimmed${separator}Foxel';
+    }
+    return '$trimmed${separator}Foxel$separator$folderName';
   }
 
   /// 账户下载目录：优先用户自定义，否则使用该账户沙箱默认目录。
