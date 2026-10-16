@@ -24,6 +24,9 @@ class AccountStore {
   static const _legacyEmailKey = 'foxel_email';
   static const _legacyAvatarUrlKey = 'foxel_avatar_url';
 
+  /// 旧版本的全局下载目录（多账户后改为按账户存储）。
+  static const _legacyDownloadDirKey = 'foxel_download_dir';
+
   static String tokenKey(String accountId) => 'foxel_acc_${accountId}_token';
 
   /// 读取全部账户，必要时执行一次旧版本迁移。
@@ -72,9 +75,48 @@ class AccountStore {
         await setActiveId(migrated.id);
         return <Account>[migrated];
       }
+    } else if (migrate && (hasIndex || migratedBefore)) {
+      // 已经进入多账户体系：幂等清理历史残留的旧版 key，
+      // 否则老设备上删光账户后仍会被旧 token 再次迁移出账户。
+      await _cleanupLegacyKeys(prefs, accounts);
     }
 
     return accounts;
+  }
+
+  /// 幂等清理：把旧版全局下载目录让给唯一的账户，然后清掉旧会话 key。
+  Future<void> _cleanupLegacyKeys(
+    SharedPreferences prefs,
+    List<Account> accounts,
+  ) async {
+    const legacyKeys = <String>[
+      _legacyBaseUrlKey,
+      _legacyUsernameKey,
+      _legacyTokenKey,
+      _legacyEmailKey,
+      _legacyAvatarUrlKey,
+      _legacyDownloadDirKey,
+    ];
+    final keys = prefs.getKeys();
+    final hasLegacy = legacyKeys.any(keys.contains);
+    final marked = prefs.getBool(_migrationKey) ?? false;
+    if (!hasLegacy && marked) {
+      // 已经干净，避免每次启动都写偏好设置。
+      return;
+    }
+
+    final legacyDir = prefs.getString(_legacyDownloadDirKey);
+    if (legacyDir != null &&
+        legacyDir.trim().isNotEmpty &&
+        accounts.length == 1) {
+      final accountDirKey = 'foxel_acc_${accounts.first.id}_download_dir';
+      final existing = prefs.getString(accountDirKey);
+      if (existing == null || existing.trim().isEmpty) {
+        await prefs.setString(accountDirKey, legacyDir.trim());
+      }
+    }
+    await prefs.setBool(_migrationKey, true);
+    await _purgeLegacyKeys(prefs);
   }
 
   /// 清除旧版本遗留的会话 key。
@@ -85,6 +127,7 @@ class AccountStore {
       _legacyTokenKey,
       _legacyEmailKey,
       _legacyAvatarUrlKey,
+      _legacyDownloadDirKey,
     ]) {
       await prefs.remove(key);
     }
