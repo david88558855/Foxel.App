@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'app/app.dart';
-import 'core/platform/portable_path_provider.dart';
+import 'core/storage/portable_prefs_store.dart';
 
 export 'app/app.dart';
 

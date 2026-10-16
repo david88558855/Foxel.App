@@ -7,7 +7,7 @@ import 'package:foxel/core/models/account.dart';
 import 'package:foxel/core/models/accounts_snapshot.dart';
 import 'package:foxel/core/models/session.dart';
 import 'package:foxel/core/theme/design_tokens.dart';
-import 'package:foxel/core/platform/portable_path_provider.dart';
+import 'package:foxel/core/storage/portable_prefs_store.dart';
 import 'package:foxel/core/storage/account_store.dart';
 import 'package:foxel/features/accounts/pages/account_center_page.dart';
 import 'package:foxel/features/accounts/pages/account_form_page.dart';
