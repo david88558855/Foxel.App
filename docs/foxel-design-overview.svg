@@ -1,17 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="680" height="1000" viewBox="0 0 680 1000" font-family="'PingFang SC','Microsoft YaHei',system-ui,sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="1080" viewBox="0 0 680 1080" font-family="'PingFang SC','Microsoft YaHei',system-ui,sans-serif">
   <defs>
     <linearGradient id="hero" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#FFFFFF"/>
       <stop offset="100%" stop-color="#F0F4FF"/>
     </linearGradient>
   </defs>
-  <rect width="680" height="1000" fill="#F7F9FC"/>
+  <rect width="680" height="1080" fill="#F7F9FC"/>
 
   <!-- Hero -->
   <rect x="24" y="24" width="632" height="118" rx="24" fill="url(#hero)" stroke="#E7ECF2"/>
   <rect x="48" y="48" width="128" height="24" rx="12" fill="#EAF0FF"/>
   <text x="112" y="65" text-anchor="middle" font-size="12" font-weight="700" fill="#4C6FFF">v1.0 · 设计定稿</text>
-  <text x="48" y="98" font-size="24" font-weight="800" fill="#16202C">Foxel 账户体系设计规范</text>
+  <text x="48" y="98" font-size="24" font-weight="800" fill="#16202C">Foxel 客户端设计规范</text>
   <text x="48" y="122" font-size="13" fill="#5C6B7A">多账户隔离的私有云盘客户端 · Android / iOS / Windows / macOS / Linux</text>
 
   <!-- 色板 -->
@@ -67,7 +67,7 @@
   </g>
 
   <!-- 页面地图 -->
-  <text x="24" y="500" font-size="15" font-weight="800" fill="#16202C">页面地图（设计稿 9 页）</text>
+  <text x="24" y="500" font-size="15" font-weight="800" fill="#16202C">页面地图（设计稿 10 页）</text>
   <g>
     <rect x="24" y="516" width="200" height="60" rx="16" fill="#FFFFFF" stroke="#E7ECF2"/>
     <text x="40" y="540" font-size="12.5" font-weight="800" fill="#4C6FFF">① 概览与规范</text>
@@ -93,31 +93,39 @@
     <text x="472" y="612" font-size="12.5" font-weight="800" fill="#4C6FFF">⑥ 主界面与导航</text>
     <text x="472" y="632" font-size="11" fill="#5C6B7A">尺寸 · 间距 · 阴影规范</text>
 
-    <rect x="24" y="660" width="200" height="60" rx="16" fill="#FFFFFF" stroke="#E7ECF2"/>
-    <text x="40" y="684" font-size="12.5" font-weight="800" fill="#4C6FFF">⑦ 隔离与存储</text>
-    <text x="40" y="704" font-size="11" fill="#5C6B7A">五类数据分区</text>
+    <rect x="24" y="660" width="200" height="60" rx="16" fill="#FFFFFF" stroke="#4C6FFF" stroke-width="1.5"/>
+    <text x="40" y="684" font-size="12.5" font-weight="800" fill="#4C6FFF">⑦ 文件批量操作</text>
+    <text x="40" y="704" font-size="11" fill="#5C6B7A">多选 · 下载移动复制删除</text>
 
     <rect x="240" y="660" width="200" height="60" rx="16" fill="#FFFFFF" stroke="#E7ECF2"/>
-    <text x="256" y="684" font-size="12.5" font-weight="800" fill="#4C6FFF">⑧ 异常与确认</text>
-    <text x="256" y="704" font-size="11" fill="#5C6B7A">失效 · 切换中 · 删除确认</text>
+    <text x="256" y="684" font-size="12.5" font-weight="800" fill="#4C6FFF">⑧ 隔离与存储</text>
+    <text x="256" y="704" font-size="11" fill="#5C6B7A">五类数据分区</text>
 
     <rect x="456" y="660" width="200" height="60" rx="16" fill="#FFFFFF" stroke="#E7ECF2"/>
-    <text x="472" y="684" font-size="12.5" font-weight="800" fill="#4C6FFF">⑨ 范围与规划</text>
-    <text x="472" y="704" font-size="11" fill="#5C6B7A">已落地能力 · 后续规划</text>
+    <text x="472" y="684" font-size="12.5" font-weight="800" fill="#4C6FFF">⑨ 异常与确认</text>
+    <text x="472" y="704" font-size="11" fill="#5C6B7A">失效 · 切换中 · 删除确认</text>
+
+    <rect x="24" y="732" width="200" height="60" rx="16" fill="#FFFFFF" stroke="#E7ECF2"/>
+    <text x="40" y="756" font-size="12.5" font-weight="800" fill="#4C6FFF">⑩ 范围与规划</text>
+    <text x="40" y="776" font-size="11" fill="#5C6B7A">已落地能力 · 后续规划</text>
+
+    <rect x="240" y="732" width="416" height="60" rx="16" fill="#FAFCFF" stroke="#E7ECF2" stroke-dasharray="4 3"/>
+    <text x="256" y="756" font-size="11.5" font-weight="700" fill="#8A5A08">⑦ 文件批量操作为新增设计，待确认后再实现</text>
+    <text x="256" y="776" font-size="11" fill="#93A0AF">服务端暂无打包下载接口，文件夹下载按递归展开为文件队列处理</text>
   </g>
 
   <!-- 底部导航规范 -->
-  <text x="24" y="760" font-size="15" font-weight="800" fill="#16202C">底部浮动导航规范</text>
-  <rect x="24" y="776" width="632" height="150" rx="20" fill="#FFFFFF" stroke="#E7ECF2"/>
-  <text x="48" y="806" font-size="12" font-weight="700" fill="#16202C">胶囊高 74（内边距 6 + 内容 62）· 左右边距 16 · 距底部 ≥12</text>
-  <text x="48" y="830" font-size="12" font-weight="700" fill="#16202C">分段宽 =（宽 − 12）/ 3 · 段间距 14 · 选中段圆角 15 · 胶囊圆角 22</text>
-  <text x="48" y="854" font-size="12" font-weight="700" fill="#16202C">图标 20px · 标签 10.5 w800 · 描边 1px #E7ECF2</text>
-  <text x="48" y="878" font-size="12" font-weight="700" fill="#16202C">阴影 blur 14 / offset (0,6) / 10% #8B97AA（不遮系统导航区）</text>
+  <text x="24" y="836" font-size="15" font-weight="800" fill="#16202C">底部浮动导航规范</text>
+  <rect x="24" y="852" width="632" height="150" rx="20" fill="#FFFFFF" stroke="#E7ECF2"/>
+  <text x="48" y="882" font-size="12" font-weight="700" fill="#16202C">胶囊高 74（内边距 6 + 内容 62）· 左右边距 16 · 距底部 ≥12</text>
+  <text x="48" y="906" font-size="12" font-weight="700" fill="#16202C">分段宽 =（宽 − 12）/ 3 · 段间距 14 · 选中段圆角 15 · 胶囊圆角 22</text>
+  <text x="48" y="930" font-size="12" font-weight="700" fill="#16202C">图标 20px · 标签 10.5 w800 · 描边 1px #E7ECF2</text>
+  <text x="48" y="954" font-size="12" font-weight="700" fill="#16202C">阴影 blur 14 / offset (0,6) / 10% #8B97AA（不遮系统导航区）</text>
   <g>
-    <rect x="48" y="892" width="584" height="22" rx="8" fill="#F7F9FC"/>
-    <text x="60" y="907" font-size="11" fill="#93A0AF">按下反馈只保留选中胶囊动画，禁用 splash / highlight（避免出现比胶囊更大的高亮块）</text>
+    <rect x="48" y="968" width="584" height="22" rx="8" fill="#F7F9FC"/>
+    <text x="60" y="983" font-size="11" fill="#93A0AF">按下反馈只保留选中胶囊动画，禁用 splash / highlight（避免出现比胶囊更大的高亮块）</text>
   </g>
 
-  <text x="24" y="962" font-size="11.5" fill="#93A0AF">完整可交互设计稿：foxel-account-design.html（9 页签可切换）</text>
-  <text x="24" y="982" font-size="11.5" fill="#93A0AF">设计令牌实现：lib/core/theme/design_tokens.dart</text>
+  <text x="24" y="1038" font-size="11.5" fill="#93A0AF">完整可交互设计稿：foxel-account-design.html（10 页签可切换）</text>
+  <text x="24" y="1058" font-size="11.5" fill="#93A0AF">设计令牌实现：lib/core/theme/design_tokens.dart</text>
 </svg>

@@ -272,7 +272,7 @@
     <h1>Foxel App 账户管理设计稿</h1>
     <p>
       一份统一的账户体系设计：底部导航「文件 / 任务 / 设置」，账户管理作为设置页内的独立二级页；
-      无账户时各平台统一停留在账户管理页空态；凭证 · 下载目录 · 传输任务 · 浏览位置 · 媒体缓存五类数据按账户隔离。
+      无账户时各平台统一停留在账户管理页空态；凭证 · 下载目录 · 传输任务 · 浏览位置 · 媒体缓存五类数据按账户隔离；文件页支持多选批量操作。
     </p>
     <div class="meta-row">
       <span class="chip">平台 <b>Android / iOS / Windows / macOS / Linux</b></span>
@@ -289,9 +289,10 @@
     <button class="tab" data-p="p4">④ 编辑账户</button>
     <button class="tab" data-p="p5">⑤ 设置页与下载目录</button>
     <button class="tab" data-p="p6">⑥ 主界面与底部导航</button>
-    <button class="tab" data-p="p7">⑦ 隔离与存储</button>
-    <button class="tab" data-p="p8">⑧ 异常与确认</button>
-    <button class="tab" data-p="p9">⑨ 范围与规划</button>
+    <button class="tab" data-p="p10">⑦ 文件批量操作</button>
+    <button class="tab" data-p="p7">⑧ 隔离与存储</button>
+    <button class="tab" data-p="p8">⑨ 异常与确认</button>
+    <button class="tab" data-p="p9">⑩ 范围与规划</button>
   </div>
 
   <!-- ===================== ① 概览 ===================== -->
@@ -360,11 +361,12 @@
         <ul>
           <li>⑤ 设置页（含下载目录浏览）</li>
           <li>⑥ 主界面与底部导航规范</li>
-          <li>⑦ 隔离与存储（含 Windows 便携版）</li>
+          <li>⑦ 文件批量操作（多选下载 / 移动 / 复制 / 删除）</li>
         </ul>
         <ul>
-          <li>⑧ 异常与确认态</li>
-          <li>⑨ 变更记录与待办</li>
+          <li>⑧ 隔离与存储（含 Windows 便携版）</li>
+          <li>⑨ 异常与确认态</li>
+          <li>⑩ 范围与规划</li>
         </ul>
       </div>
     </div>
@@ -791,7 +793,258 @@
     </div>
   </div>
 
-  <!-- ===================== ⑦ 隔离与存储 ===================== -->
+  <!-- ===================== ⑦ 文件批量操作（panel id 维持 p10，避免改动既有页签 id） ===================== -->
+  <div class="panel" id="p10">
+    <div class="note">
+      新增设计（<b>仅设计，待确认后再动代码</b>）：① 长按任意条目直接进入多选并选中该项；② 或点工具栏右上「<b>选择</b>」进入。
+      服务端当前提供 <code>copy / move / deletePath / downloadFile</code>，<b>无打包下载接口</b>，因此文件夹的批量下载按「递归展开为文件队列」处理。
+    </div>
+
+    <div class="stage">
+      <!-- 1 入口 -->
+      <div class="phone small">
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="batt"><i></i></span></span></div>
+          <div class="appbar" style="padding-bottom:8px;">
+            <div class="title">文件</div>
+            <div style="padding:0 10px;font-size:13.5px;font-weight:800;color:var(--brand);">选择</div>
+          </div>
+          <div class="content scroll" style="padding-top:6px;">
+            <div class="mcard" style="padding:10px 12px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <svg class="ico sm" viewBox="0 0 24 24" style="stroke:#93A0AF"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2"/></svg>
+                <span style="font-size:12.5px;color:var(--ink3);">搜索当前目录</span>
+                <span style="margin-left:auto;display:flex;gap:10px;">
+                  <svg class="ico sm" viewBox="0 0 24 24" style="stroke:#5C6B7A"><path d="M4 7h16M7 12h10M10 17h4"/></svg>
+                  <svg class="ico sm" viewBox="0 0 24 24" style="stroke:#5C6B7A"><path d="M12 5v14M5 12h14"/></svg>
+                  <svg class="ico sm" viewBox="0 0 24 24" style="stroke:#5C6B7A"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>
+                </span>
+              </div>
+            </div>
+            <div class="sec-label">/ 照片 · 12 项</div>
+            <div class="rows">
+              <div class="row">
+                <div class="avatar sm" style="background:#EAF0FF;"></div>
+                <div class="grow"><div class="n-1">2026 旅行</div><div class="n-2">文件夹 · 24 项</div></div>
+              </div>
+              <div class="row">
+                <div class="avatar sm c-ok"></div>
+                <div class="grow"><div class="n-1">报告.pdf</div><div class="n-2">8.4 MB · 今天 09:12</div></div>
+              </div>
+              <div class="row">
+                <div class="avatar sm c-purple"></div>
+                <div class="grow"><div class="n-1">演示视频.mp4</div><div class="n-2">120.0 MB · 昨天</div></div>
+              </div>
+            </div>
+            <div class="mcard" style="margin-top:12px;background:#FAFCFF;border-style:dashed;">
+              <div style="font-size:11.5px;color:var(--ink2);font-weight:600;">
+                长按任一文件 / 文件夹 → 直接进入多选并选中该项
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2 多选态 -->
+      <div class="phone small">
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="batt"><i></i></span></span></div>
+          <div class="appbar" style="padding-bottom:6px;background:#fff;border-bottom:1px solid var(--line);">
+            <div style="padding:0 10px;font-size:13.5px;font-weight:800;color:var(--ink2);">取消</div>
+            <div style="flex:1;text-align:center;font-size:16px;font-weight:800;">已选择 3 项</div>
+            <div style="padding:0 10px;font-size:13.5px;font-weight:800;color:var(--brand);">全选</div>
+          </div>
+          <div class="content scroll" style="padding-top:10px;">
+            <div class="mcard" style="background:#F7FAFF;border-style:dashed;padding:10px 14px;">
+              <div style="font-size:11.5px;color:var(--ink2);font-weight:700;">含 2 个文件（128.4 MB）+ 1 个文件夹（24 项）</div>
+            </div>
+            <div class="rows" style="margin-top:10px;">
+              <div class="row" style="background:#F7FAFF;">
+                <div class="check on"><svg viewBox="0 0 16 16" style="width:12px;height:12px;"><path d="M3 8.4l3.2 3.2L13 4.8" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg></div>
+                <div class="avatar sm" style="background:#EAF0FF;"></div>
+                <div class="grow"><div class="n-1">2026 旅行</div><div class="n-2">文件夹 · 24 项</div></div>
+              </div>
+              <div class="row" style="background:#F7FAFF;">
+                <div class="check on"><svg viewBox="0 0 16 16" style="width:12px;height:12px;"><path d="M3 8.4l3.2 3.2L13 4.8" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg></div>
+                <div class="avatar sm c-ok"></div>
+                <div class="grow"><div class="n-1">报告.pdf</div><div class="n-2">8.4 MB</div></div>
+              </div>
+              <div class="row" style="background:#F7FAFF;">
+                <div class="check on"><svg viewBox="0 0 16 16" style="width:12px;height:12px;"><path d="M3 8.4l3.2 3.2L13 4.8" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg></div>
+                <div class="avatar sm c-purple"></div>
+                <div class="grow"><div class="n-1">演示视频.mp4</div><div class="n-2">120.0 MB</div></div>
+              </div>
+              <div class="row">
+                <div class="check"></div>
+                <div class="avatar sm c-gray"></div>
+                <div class="grow"><div class="n-1">说明.txt</div><div class="n-2">2 KB</div></div>
+              </div>
+            </div>
+            <div style="height:86px;"></div>
+          </div>
+          <div style="position:absolute;left:14px;right:14px;bottom:14px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:8px;display:flex;box-shadow:0 6px 14px rgba(139,151,170,.10);">
+            <div style="flex:1;text-align:center;">
+              <svg class="ico" viewBox="0 0 24 24" style="stroke:#4C6FFF;margin:0 auto;"><path d="M12 4v10M8 11l4 4 4-4M5 19h14"/></svg>
+              <div style="font-size:10.5px;font-weight:800;color:#4C6FFF;margin-top:2px;">下载</div>
+            </div>
+            <div style="flex:1;text-align:center;">
+              <svg class="ico" viewBox="0 0 24 24" style="stroke:#5C6B7A;margin:0 auto;"><path d="M3 7h6l2 2h10v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M12 18v-6M9 15l3-3 3 3"/></svg>
+              <div style="font-size:10.5px;font-weight:800;color:#5C6B7A;margin-top:2px;">移动</div>
+            </div>
+            <div style="flex:1;text-align:center;">
+              <svg class="ico" viewBox="0 0 24 24" style="stroke:#5C6B7A;margin:0 auto;"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 012-2h8"/></svg>
+              <div style="font-size:10.5px;font-weight:800;color:#5C6B7A;margin-top:2px;">复制</div>
+            </div>
+            <div style="flex:1;text-align:center;">
+              <svg class="ico" viewBox="0 0 24 24" style="stroke:#E5484D;margin:0 auto;"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>
+              <div style="font-size:10.5px;font-weight:800;color:#E5484D;margin-top:2px;">删除</div>
+            </div>
+            <div style="flex:1;text-align:center;">
+              <svg class="ico" viewBox="0 0 24 24" style="stroke:#5C6B7A;margin:0 auto;"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>
+              <div style="font-size:10.5px;font-weight:800;color:#5C6B7A;margin-top:2px;">更多</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3 更多菜单 -->
+      <div class="phone small">
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="batt"><i></i></span></span></div>
+          <div class="appbar" style="padding-bottom:6px;background:#fff;border-bottom:1px solid var(--line);">
+            <div style="padding:0 10px;font-size:13.5px;font-weight:800;color:var(--ink2);">取消</div>
+            <div style="flex:1;text-align:center;font-size:16px;font-weight:800;">已选择 3 项</div>
+            <div style="padding:0 10px;font-size:13.5px;font-weight:800;color:var(--brand);">全选</div>
+          </div>
+          <div class="content scroll" style="opacity:.35;padding-top:10px;">
+            <div class="rows">
+              <div class="row"><div class="check on"></div><div class="grow"><div class="n-1">2026 旅行</div></div></div>
+              <div class="row"><div class="check on"></div><div class="grow"><div class="n-1">报告.pdf</div></div></div>
+            </div>
+          </div>
+          <div class="scrim"></div>
+          <div class="sheet">
+            <div class="handle"></div>
+            <div style="font-size:13px;font-weight:800;color:var(--ink3);margin:0 2px 8px;">对已选 3 项执行</div>
+            <div class="rows">
+              <div class="row">
+                <svg class="ico" viewBox="0 0 24 24" style="stroke:#4C6FFF"><path d="M12 4v10M8 11l4 4 4-4M5 19h14"/></svg>
+                <div class="grow"><div class="n-1">下载</div><div class="n-2">文件夹将递归下载其中文件</div></div>
+              </div>
+              <div class="row">
+                <svg class="ico" viewBox="0 0 24 24" style="stroke:#5C6B7A"><path d="M3 7h6l2 2h10v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M12 18v-6M9 15l3-3 3 3"/></svg>
+                <div class="grow"><div class="n-1">移动到…</div><div class="n-2">选择目标文件夹</div></div>
+              </div>
+              <div class="row">
+                <svg class="ico" viewBox="0 0 24 24" style="stroke:#5C6B7A"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 012-2h8"/></svg>
+                <div class="grow"><div class="n-1">复制到…</div><div class="n-2">选择目标文件夹</div></div>
+              </div>
+              <div class="row" style="opacity:.5;">
+                <svg class="ico" viewBox="0 0 24 24" style="stroke:#93A0AF"><path d="M4 7h16v13H4z"/><path d="M9 7V4h6v3"/></svg>
+                <div class="grow"><div class="n-1">批量重命名</div><div class="n-2">后续支持</div></div>
+              </div>
+              <div class="row">
+                <svg class="ico" viewBox="0 0 24 24" style="stroke:#E5484D"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>
+                <div class="grow"><div class="n-1" style="color:#E5484D;">删除</div><div class="n-2">删除后不可撤销</div></div>
+              </div>
+              <div class="row">
+                <svg class="ico" viewBox="0 0 24 24" style="stroke:#5C6B7A"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                <div class="grow"><div class="n-1">取消选择</div><div class="n-2">留在选择模式</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4 删除确认 -->
+      <div class="phone small">
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="batt"><i></i></span></span></div>
+          <div class="appbar" style="padding-bottom:6px;"><div class="title">文件</div></div>
+          <div class="content scroll" style="opacity:.35;">
+            <div class="rows">
+              <div class="row"><div class="grow"><div class="n-1">2026 旅行</div></div></div>
+              <div class="row"><div class="grow"><div class="n-1">报告.pdf</div></div></div>
+            </div>
+          </div>
+          <div class="scrim"></div>
+          <div class="dialog">
+            <h5>删除 3 项？</h5>
+            <p>包含 <b>1 个文件夹</b>（24 项内容）与 2 个文件，合计约 128.4 MB。<br/>服务器上的文件将被删除，此操作不可撤销。</p>
+            <div class="acts">
+              <div class="btn ghost">取消</div>
+              <div class="btn danger">删除 3 项</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5 目标目录选择 -->
+      <div class="phone small">
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="batt"><i></i></span></span></div>
+          <div class="appbar" style="padding-bottom:6px;">
+            <div class="iconbtn"><svg class="ico" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></div>
+            <div style="flex:1;text-align:center;font-size:16px;font-weight:800;">移动到…</div><div style="width:36px;"></div>
+          </div>
+          <div class="content scroll" style="padding-top:8px;">
+            <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink3);font-weight:700;padding:0 2px 8px;">
+              <span>根目录</span><span>›</span><span>文档</span>
+            </div>
+            <div class="rows">
+              <div class="row">
+                <svg class="ico" viewBox="0 0 24 24" style="stroke:#4C6FFF"><path d="M3 7h6l2 2h10v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+                <div class="grow"><div class="n-1">移动到此文件夹</div><div class="n-2">将 3 项移动到「文档」</div></div>
+              </div>
+            </div>
+            <div class="sec-label">子文件夹</div>
+            <div class="rows">
+              <div class="row">
+                <div class="avatar sm" style="background:#EAF0FF;"></div>
+                <div class="grow"><div class="n-1">工作</div><div class="n-2">18 项</div></div>
+                <span style="color:var(--ink3);">›</span>
+              </div>
+              <div class="row">
+                <div class="avatar sm" style="background:#EAF0FF;"></div>
+                <div class="grow"><div class="n-1">归档</div><div class="n-2">6 项</div></div>
+                <span style="color:var(--ink3);">›</span>
+              </div>
+              <div class="row" style="opacity:.5;">
+                <div class="avatar sm" style="background:#EAF0FF;"></div>
+                <div class="grow"><div class="n-1">照片</div><div class="n-2">来源目录，不可选为目标</div></div>
+              </div>
+            </div>
+            <div class="mcard" style="margin-top:12px;background:#FAFCFF;border-style:dashed;">
+              <div style="font-size:11.5px;color:var(--ink2);font-weight:600;">
+                同名项将自动追加「(1)」后缀，不覆盖已有文件
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stage-note">
+        <h4>⑦ 文件批量操作</h4>
+        <p class="sub">入口：长按任意条目，或工具栏右上「选择」。仅在选择模式下改变点击语义，不影响日常浏览</p>
+
+        <ul class="kv">
+          <li><span class="tag">入口</span>两种方式：<b>长按条目</b>直接进入多选并选中该项；或点右上「<b>选择</b>」进入空选择态。空目录不显示「选择」。</li>
+          <li><span class="tag">选择模式</span>AppBar 变「<b>取消 / 已选择 N 项 / 全选</b>」；条目左侧出现圆形勾选框，选中项浅蓝底；此时<b>点条目 = 勾选</b>（不再打开），条目右侧的「⋯」按钮隐藏。</li>
+          <li><span class="tag">计数</span>顶部信息条给出「含 X 个文件（合计体积）+ Y 个文件夹（共 Z 项）」，避免误选整个大目录。</li>
+          <li><span class="tag">操作栏</span>底部悬浮胶囊四项主操作：<b>下载 / 移动 / 复制 / 删除</b>（删除为危险色），第五项「更多」展开完整菜单。</li>
+          <li><span class="tag w">更多菜单</span>下载、移动到…、复制到…、<b>批量重命名（后续支持，置灰）</b>、删除、取消选择。</li>
+          <li><span class="tag d">删除确认</span>列明数量与构成（含几个文件夹、多少内容、合计体积），声明不可撤销；按钮写明确数量。</li>
+          <li><span class="tag">目标目录</span>移动 / 复制进入目录选择页：面包屑 + 当前目录「移动到此文件夹」+ 子目录逐级进入；<b>来源目录自身不可选为目标</b>，其下级也不可选（防循环）。</li>
+          <li><span class="tag">命名冲突</span>同名项自动追加「(1)」后缀，不覆盖已有文件，结果以 Toast 汇总。</li>
+          <li><span class="tag g">执行反馈</span>操作后自动退出选择模式；Toast 汇总（如「已加入 5 个下载任务」「已移动 3 项」）；<b>失败项保留选中</b>并提示原因，便于重试。</li>
+          <li><span class="tag">接口</span>下载 → 文件夹递归展开后逐个 <code>downloadFile</code>；移动 / 复制 → 逐项 <code>move</code> / <code>copy</code>；删除 → 逐项 <code>deletePath</code>（目录为递归删除）。受限并发（建议 3），避免打爆服务端。</li>
+          <li><span class="tag w">边界</span>切换目录或搜索结果变化 → 退出选择并清空；单次上限 200 项，超出提示先分批；选择模式不跨目录累积。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== ⑧ 隔离与存储 ===================== -->
   <div class="panel" id="p7">
     <div class="iso" style="margin-bottom:18px;">
       <div class="iso-col">
@@ -898,8 +1151,8 @@
       </div>
 
       <div class="stage-note">
-        <h4>⑧ 异常与确认态</h4>
-        <p class="sub">配合账户管理页使用；删除确认见第 ② 页</p>
+        <h4>⑨ 异常与确认态</h4>
+        <p class="sub">配合账户管理页使用；批量删除确认见第 ② 页、文件批量删除见第 ⑦ 页</p>
         <ul class="kv">
           <li><span class="tag w">失效</span>账户管理页顶部橙色提示条 + 列表行「失效」标记，一键重新验证；本地沙箱数据保留，不静默失败。</li>
           <li><span class="tag">切换中</span>校验 → 加载沙箱 → 恢复浏览位置，短暂 loading；失败则回滚到原账户并提示，绝不出现「无当前账户」的空白界面。</li>
@@ -921,6 +1174,7 @@
           <tr><td><b>隔离</b></td><td>凭证 / 下载目录 / 传输队列 / 浏览位置 / 媒体缓存 五类数据按账户分区，四个开关可逐账户调整</td></tr>
           <tr><td><b>架构</b></td><td>底部导航「文件 / 任务 / 设置」；账户管理为设置页内的独立二级页；桌面端内容最大宽度 720 居中</td></tr>
           <tr><td><b>存储</b></td><td>Windows 便携版数据落在 <code>程序目录/userdata/prefs.json</code>；其他平台使用系统应用目录</td></tr>
+          <tr><td><b>批量操作</b></td><td>文件 / 文件夹多选：长按或「选择」进入，批量下载、移动、复制、删除；文件夹下载按递归展开为文件队列</td></tr>
           <tr><td><b>视觉</b></td><td>设计令牌统一：主色 #4C6FFF、背景 #F4F7FA、卡片 20 圆角、三级文字、20px 图标</td></tr>
         </tbody>
       </table>
