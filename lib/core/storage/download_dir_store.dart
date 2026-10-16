@@ -47,6 +47,54 @@ class DownloadDirStore {
     }
   }
 
+  /// 沙箱内下载目录的配置 key。
+  static String dirKeyFor(String accountId) =>
+      'foxel_acc_${accountId}_download_dir';
+
+  /// 账户默认下载目录：<平台默认>/Foxel/<账户ID>。
+  static Future<String> defaultDirFor(String accountId) async {
+    final base = await defaultDir();
+    if (base.isEmpty) {
+      return '';
+    }
+    final separator = Platform.pathSeparator;
+    final trimmed = base.endsWith(separator)
+        ? base.substring(0, base.length - separator.length)
+        : base;
+    return '$trimmed${separator}Foxel$separator$accountId';
+  }
+
+  /// 账户下载目录：优先用户自定义，否则使用该账户沙箱默认目录。
+  static Future<String> currentDirFor(String accountId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(dirKeyFor(accountId));
+    if (saved != null && saved.trim().isNotEmpty) {
+      return saved.trim();
+    }
+    return defaultDirFor(accountId);
+  }
+
+  /// 保存账户自定义下载目录。
+  static Future<void> setDirFor(String accountId, String path) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(dirKeyFor(accountId), path.trim());
+  }
+
+  /// 恢复账户默认下载目录。
+  static Future<void> resetDirFor(String accountId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(dirKeyFor(accountId));
+  }
+
+  /// 解析账户下载目录并确保存在。
+  static Future<Directory> resolveFor(String accountId) async {
+    final dir = Directory(await currentDirFor(accountId));
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  }
+
   /// 当前是否配置了自定义下载目录。
   static Future<bool> isCustomDir() async {
     final prefs = await SharedPreferences.getInstance();

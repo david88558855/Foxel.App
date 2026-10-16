@@ -12,6 +12,7 @@ class VideoPlayerPage extends StatefulWidget {
   const VideoPlayerPage({
     super.key,
     required this.api,
+    required this.accountId,
     required this.path,
     required this.name,
     required this.size,
@@ -19,6 +20,7 @@ class VideoPlayerPage extends StatefulWidget {
   });
 
   final FoxelApi api;
+  final String accountId;
   final String path;
   final String name;
   final int size;
@@ -112,7 +114,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       await _player.setVolume(_volume * 100);
       await _player.setRate(_playbackSpeed);
       final savedPosition = await _playbackStore.load(
-        api: widget.api,
+        accountId: widget.accountId,
         path: widget.path,
       );
       final startPosition =
@@ -352,12 +354,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       return;
     }
     if (_duration - _position <= const Duration(seconds: 10)) {
-      await _playbackStore.clear(api: widget.api, path: widget.path);
+      await _playbackStore.clear(
+        accountId: widget.accountId,
+        path: widget.path,
+      );
       return;
     }
     if (_position > const Duration(seconds: 3)) {
       await _playbackStore.save(
-        api: widget.api,
+        accountId: widget.accountId,
         path: widget.path,
         position: _position,
       );

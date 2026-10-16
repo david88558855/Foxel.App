@@ -4,8 +4,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'package:foxel/core/api/foxel_api.dart';
+import 'package:foxel/core/models/account.dart';
+import 'package:foxel/features/accounts/pages/account_center_page.dart';
 import 'package:foxel/features/drive/controllers/transfer_task_controller.dart';
-import 'package:foxel/features/drive/pages/account_settings_page.dart';
 import 'package:foxel/features/drive/pages/file_browser_page.dart';
 import 'package:foxel/features/drive/pages/transfer_tasks_page.dart';
 
@@ -13,21 +14,34 @@ class DriveShellPage extends StatefulWidget {
   const DriveShellPage({
     super.key,
     required this.api,
-    required this.username,
-    required this.email,
-    required this.avatarUrl,
-    required this.baseUrl,
-    required this.onOpenSettings,
-    required this.onLogout,
+    required this.account,
+    required this.accounts,
+    required this.taskController,
+    required this.runningTaskCounts,
+    required this.switching,
+    required this.onSwitchAccount,
+    required this.onOpenSwitcher,
+    required this.onAddAccount,
+    required this.onEditAccount,
+    required this.onRemoveAccount,
+    required this.onClearLocalData,
   });
 
   final FoxelApi api;
-  final String username;
-  final String email;
-  final String avatarUrl;
-  final String baseUrl;
-  final VoidCallback onOpenSettings;
-  final VoidCallback onLogout;
+
+  /// 当前账户（同时决定界面主题色）。
+  final Account account;
+  final List<Account> accounts;
+  final TransferTaskController taskController;
+  final Map<String, int> runningTaskCounts;
+  final bool switching;
+
+  final ValueChanged<Account> onSwitchAccount;
+  final VoidCallback onOpenSwitcher;
+  final VoidCallback onAddAccount;
+  final ValueChanged<Account> onEditAccount;
+  final ValueChanged<Account> onRemoveAccount;
+  final ValueChanged<Account> onClearLocalData;
 
   @override
   State<DriveShellPage> createState() => _DriveShellPageState();
@@ -38,7 +52,6 @@ class _DriveShellPageState extends State<DriveShellPage> {
   int _previousIndex = 0;
   final Set<int> _visitedIndexes = {0};
   final List<Widget?> _tabs = List<Widget?>.filled(3, null);
-  final TransferTaskController _taskController = TransferTaskController();
 
   @override
   void initState() {
@@ -50,10 +63,8 @@ class _DriveShellPageState extends State<DriveShellPage> {
   void didUpdateWidget(covariant DriveShellPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.api != widget.api ||
-        oldWidget.username != widget.username ||
-        oldWidget.email != widget.email ||
-        oldWidget.avatarUrl != widget.avatarUrl ||
-        oldWidget.baseUrl != widget.baseUrl) {
+        oldWidget.account.id != widget.account.id ||
+        oldWidget.taskController != widget.taskController) {
       for (var index = 0; index < _tabs.length; index++) {
         _tabs[index] = null;
       }
@@ -62,12 +73,6 @@ class _DriveShellPageState extends State<DriveShellPage> {
         ..add(_currentIndex);
       _tabs[_currentIndex] = _buildTab(_currentIndex);
     }
-  }
-
-  @override
-  void dispose() {
-    _taskController.dispose();
-    super.dispose();
   }
 
   void _selectIndex(int index) {
@@ -86,17 +91,22 @@ class _DriveShellPageState extends State<DriveShellPage> {
     return switch (index) {
       0 => FileBrowserPage(
         api: widget.api,
-        taskController: _taskController,
+        taskController: widget.taskController,
+        account: widget.account,
         onOpenTasks: () => _selectIndex(1),
+        onOpenSwitcher: widget.onOpenSwitcher,
       ),
-      1 => TransferTasksPage(controller: _taskController),
-      _ => AccountSettingsPage(
-        username: widget.username,
-        email: widget.email,
-        avatarUrl: widget.avatarUrl,
-        baseUrl: widget.baseUrl,
-        onSwitchServer: widget.onOpenSettings,
-        onLogout: widget.onLogout,
+      1 => TransferTasksPage(controller: widget.taskController),
+      _ => AccountCenterPage(
+        accounts: widget.accounts,
+        activeId: widget.account.id,
+        runningTaskCounts: widget.runningTaskCounts,
+        onSwitchAccount: widget.onSwitchAccount,
+        onAddAccount: widget.onAddAccount,
+        onEditAccount: widget.onEditAccount,
+        onRemoveAccount: widget.onRemoveAccount,
+        onClearLocalData: widget.onClearLocalData,
+        onOpenSwitcher: widget.onOpenSwitcher,
       ),
     };
   }
@@ -120,6 +130,7 @@ class _DriveShellPageState extends State<DriveShellPage> {
             child: _FloatingBottomNav(
               currentIndex: _currentIndex,
               onSelected: _selectIndex,
+              activeColor: Color(widget.account.colorValue),
             ),
           ),
         ],
@@ -197,10 +208,12 @@ class _FloatingBottomNav extends StatelessWidget {
   const _FloatingBottomNav({
     required this.currentIndex,
     required this.onSelected,
+    required this.activeColor,
   });
 
   final int currentIndex;
   final ValueChanged<int> onSelected;
+  final Color activeColor;
 
   static const _items = [
     _NavItem(
@@ -214,9 +227,9 @@ class _FloatingBottomNav extends StatelessWidget {
       selectedIcon: CupertinoIcons.tray_fill,
     ),
     _NavItem(
-      label: '设置',
-      icon: CupertinoIcons.gear_alt,
-      selectedIcon: CupertinoIcons.gear_alt_fill,
+      label: '账户',
+      icon: CupertinoIcons.person_alt,
+      selectedIcon: CupertinoIcons.person_alt_fill,
     ),
   ];
 
@@ -306,6 +319,7 @@ class _FloatingBottomNav extends StatelessWidget {
                                 child: _FloatingNavButton(
                                   item: _items[index],
                                   selected: index == currentIndex,
+                                  activeColor: activeColor,
                                   onTap: () => onSelected(index),
                                 ),
                               ),
@@ -328,16 +342,17 @@ class _FloatingNavButton extends StatelessWidget {
   const _FloatingNavButton({
     required this.item,
     required this.selected,
+    required this.activeColor,
     required this.onTap,
   });
 
   final _NavItem item;
   final bool selected;
+  final Color activeColor;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    const activeColor = Color(0xFF3366F5);
     const inactiveColor = Color(0xFF818791);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),

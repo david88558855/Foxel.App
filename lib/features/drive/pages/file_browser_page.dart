@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -5,8 +6,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:foxel/core/api/foxel_api.dart';
+import 'package:foxel/core/models/account.dart';
 import 'package:foxel/core/models/file_entry.dart';
+import 'package:foxel/core/storage/browse_state_store.dart';
 import 'package:foxel/core/storage/download_dir_store.dart';
+import 'package:foxel/features/accounts/widgets/account_avatar.dart';
 import 'package:foxel/features/drive/controllers/transfer_task_controller.dart';
 import 'package:foxel/features/media/pages/image_viewer_page.dart';
 import 'package:foxel/features/media/pages/video_player_page.dart';
@@ -20,12 +24,16 @@ class FileBrowserPage extends StatefulWidget {
     super.key,
     required this.api,
     required this.taskController,
+    required this.account,
     required this.onOpenTasks,
+    required this.onOpenSwitcher,
   });
 
   final FoxelApi api;
   final TransferTaskController taskController;
+  final Account account;
   final VoidCallback onOpenTasks;
+  final VoidCallback onOpenSwitcher;
 
   @override
   State<FileBrowserPage> createState() => _FileBrowserPageState();
@@ -48,14 +56,58 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   void initState() {
     super.initState();
     _listingFuture = widget.api.listDirectory(_path);
+    unawaited(_restoreBrowseState());
   }
 
   @override
   void dispose() {
     _saveCurrentScrollOffset();
+    unawaited(_saveBrowseState());
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  /// 恢复该账户上次浏览的位置（路径 / 排序 / 视图模式）。
+  Future<void> _restoreBrowseState() async {
+    if (!widget.account.rememberBrowseState) {
+      return;
+    }
+    final state = await BrowseStateStore().load(widget.account.id);
+    if (state == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _path = state.path;
+      _sortField = _sortFieldFromName(state.sortField);
+      _sortAscending = state.ascending;
+      _viewMode = state.viewMode == 'list' ? _ViewMode.list : _ViewMode.grid;
+      _listingFuture = widget.api.listDirectory(_path);
+    });
+  }
+
+  Future<void> _saveBrowseState() async {
+    if (!widget.account.rememberBrowseState) {
+      return;
+    }
+    await BrowseStateStore().save(
+      widget.account.id,
+      BrowseState(
+        path: _path,
+        sortField: _sortField.name,
+        ascending: _sortAscending,
+        viewMode: _viewMode.name,
+      ),
+    );
+  }
+
+  static _SortField _sortFieldFromName(String name) {
+    for (final field in _SortField.values) {
+      if (field.name == name) {
+        return field;
+      }
+    }
+    return _SortField.name;
   }
 
   void _refresh() {
@@ -74,6 +126,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       _searchQuery = '';
       _listingFuture = widget.api.listDirectory(_path);
     });
+    unawaited(_saveBrowseState());
   }
 
   void _saveCurrentScrollOffset() {
@@ -254,7 +307,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       return;
     }
     try {
-      final dir = await DownloadDirStore.resolve();
+      final dir = await DownloadDirStore.resolveFor(widget.account.id);
       final output = File('${dir.path}/${entry.name}');
       widget.taskController.startDownload(
         api: widget.api,
@@ -325,6 +378,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
         MaterialPageRoute<void>(
           builder: (_) => VideoPlayerPage(
             api: widget.api,
+            accountId: widget.account.id,
             path: fullPath,
             name: entry.name,
             size: entry.size,
@@ -608,6 +662,10 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
 
               return Column(
                 children: [
+                  _AccountBar(
+                    account: widget.account,
+                    onTap: widget.onOpenSwitcher,
+                  ),
                   _Toolbar(
                     controller: _searchController,
                     query: _searchQuery,
@@ -1774,6 +1832,74 @@ class _EmptyView extends StatelessWidget {
                   ),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 顶部「当前账户」条：任何时候都知道自己在哪个账户里，点击即切换。
+class _AccountBar extends StatelessWidget {
+  const _AccountBar({required this.account, required this.onTap});
+
+  final Account account;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Color(account.colorValue);
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        color: color.withValues(alpha: 0.08),
+        child: Row(
+          children: [
+            AccountAvatar(account: account, size: 26, radius: 9, fontSize: 13),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                account.displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                ),
+              ),
+            ),
+            Icon(Icons.expand_more_rounded, size: 16, color: color),
+            const Spacer(),
+            if (account.isStale)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 3,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: const Text(
+                  '需重新验证',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFFF59E0B),
+                  ),
+                ),
+              )
+            else
+              Text(
+                '当前账户',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: color.withValues(alpha: 0.75),
+                ),
+              ),
           ],
         ),
       ),

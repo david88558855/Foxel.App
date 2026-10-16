@@ -81,6 +81,23 @@ class TransferTaskController {
     tasks.dispose();
   }
 
+  /// 切换账户时中断本账户仍在进行的任务（方案 A：不跨账户并行传输）。
+  void interruptAll(String reason) {
+    if (_disposed) {
+      return;
+    }
+    tasks.value = [
+      for (final task in tasks.value)
+        if (task.status == TransferTaskStatus.running)
+          task.copyWith(
+            status: TransferTaskStatus.failed,
+            errorMessage: reason,
+          )
+        else
+          task,
+    ];
+  }
+
   void clearFinished() {
     if (_disposed) {
       return;
