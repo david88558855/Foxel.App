@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:foxel/core/models/account.dart';
 import 'package:foxel/core/theme/design_tokens.dart';
+import 'package:foxel/core/widgets/content_frame.dart';
 import 'package:foxel/features/accounts/widgets/account_avatar.dart';
 
 /// 账户管理页。
@@ -121,7 +122,7 @@ class AccountCenterPage extends StatelessWidget {
     if (asRoot) {
       return Scaffold(
         backgroundColor: AppColors.background,
-        body: SafeArea(child: body),
+        body: SafeArea(child: ContentFrame(child: body)),
       );
     }
 
@@ -141,7 +142,7 @@ class AccountCenterPage extends StatelessWidget {
           ),
         ],
       ),
-      body: SafeArea(top: false, child: body),
+      body: SafeArea(top: false, child: ContentFrame(child: body)),
     );
   }
 
@@ -185,7 +186,8 @@ class _EmptyState extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Padding(
+        child: ContentFrame(
+          child: Padding(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.page,
             AppSpacing.lg,
@@ -289,6 +291,7 @@ class _EmptyState extends StatelessWidget {
                 ),
               ),
             ],
+          ),
           ),
         ),
       ),

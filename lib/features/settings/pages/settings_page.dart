@@ -1,8 +1,13 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:foxel/core/models/account.dart';
 import 'package:foxel/core/storage/download_dir_store.dart';
 import 'package:foxel/core/theme/design_tokens.dart';
+import 'package:foxel/core/widgets/content_frame.dart';
 import 'package:foxel/features/accounts/widgets/account_avatar.dart';
 
 /// 设置页（底部导航第三个 Tab）。
@@ -92,7 +97,8 @@ class _SettingsPageState extends State<SettingsPage> {
       backgroundColor: AppColors.background,
       body: SafeArea(
         bottom: false,
-        child: ListView(
+        child: ContentFrame(
+          child: ListView(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.page,
             AppSpacing.lg,
@@ -165,11 +171,13 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
           ],
+          ),
         ),
       ),
     );
   }
 
+  /// 下载目录设置：支持手动输入、系统目录浏览、恢复默认（按账户隔离）。
   Future<void> _editDownloadDir() async {
     final account = widget.account;
     final current =
@@ -179,7 +187,8 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!mounted) {
       return;
     }
-    final result = await showDialog<String>(
+
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
@@ -188,57 +197,122 @@ class _SettingsPageState extends State<SettingsPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const Text(
+                '当前账户的下载位置，可按账户分别设置。',
+                style: AppText.itemHint,
+              ),
+              const SizedBox(height: AppSpacing.md),
               TextField(
                 controller: controller,
-                autofocus: true,
                 decoration: const InputDecoration(
                   labelText: '下载目录完整路径',
                   prefixIcon: Icon(Icons.folder_rounded),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: () async {
+                      // 系统目录选择器：桌面端返回真实路径，Android 走 SAF 选择器。
+                      final selected = await FilePicker.platform
+                          .getDirectoryPath(
+                            dialogTitle: '选择下载目录',
+                          );
+                      if (selected != null && selected.isNotEmpty) {
+                        controller.text = selected;
+                      }
+                    },
+                    icon: const Icon(Icons.folder_open_rounded, size: 18),
+                    label: const Text('浏览...'),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => controller.text = defaultDir,
+                    child: const Text('恢复默认'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                '默认：$defaultDir',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.ink3,
                 ),
               ),
             ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop('__reset__'),
-              child: const Text('恢复默认'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('取消'),
             ),
             FilledButton(
-              onPressed: () =>
-                  Navigator.of(dialogContext).pop(controller.text),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
               child: const Text('保存'),
             ),
           ],
         );
       },
     );
-    if (result == null) {
+
+    final selectedPath = controller.text.trim();
+    controller.dispose();
+
+    if (confirmed != true || !mounted || selectedPath.isEmpty) {
       return;
     }
-    if (result == '__reset__') {
-      await DownloadDirStore.resetDirFor(account.id);
-      await _loadDownloadDir();
-      if (mounted) {
-        _showMessage('已恢复默认：$defaultDir');
-      }
-      return;
-    }
-    if (result.trim().isEmpty) {
-      return;
-    }
-    final writable = await DownloadDirStore.isWritable(result);
+    await _applyDownloadDir(account, selectedPath);
+  }
+
+  Future<void> _applyDownloadDir(Account account, String path) async {
+    final writable = await DownloadDirStore.isWritable(path);
     if (!writable) {
-      if (mounted) {
-        _showMessage('该目录不可写入');
+      if (!mounted) {
+        return;
       }
+      // Android 10+ 写公共目录需要「所有文件访问」权限，桌面端不需要。
+      if (!kIsWeb && Platform.isAndroid) {
+        final granted = await DownloadDirStore.hasAllFilesAccess();
+        if (!granted) {
+          final goSettings = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) {
+              return AlertDialog(
+                title: const Text('目录暂不可写'),
+                content: const Text(
+                  'Android 10 及以上系统需要「所有文件访问」权限才能写入该目录，'
+                  '是否前往系统设置开启？开启后返回应用重试即可。',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(false),
+                    child: const Text('取消'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(true),
+                    child: const Text('去授权'),
+                  ),
+                ],
+              );
+            },
+          );
+          if (goSettings == true) {
+            await DownloadDirStore.requestAllFilesAccess();
+          }
+          return;
+        }
+      }
+      _showMessage('该目录不可写入：$path');
       return;
     }
-    await DownloadDirStore.setDirFor(account.id, result);
+
+    await DownloadDirStore.setDirFor(account.id, path);
     await _loadDownloadDir();
+    if (mounted) {
+      _showMessage('下载目录已更新');
+    }
   }
 
   void _showMessage(String message) {

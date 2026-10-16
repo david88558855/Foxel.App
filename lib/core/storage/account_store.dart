@@ -13,6 +13,10 @@ class AccountStore {
   static const _indexKey = 'foxel_accounts_index';
   static const _activeKey = 'foxel_active_account_id';
 
+  /// 旧版本会话迁移标记：迁移只做一次，且必须清理旧 key，
+  /// 否则用户删光账户后重启会被再次迁移出「默认账户」。
+  static const _migrationKey = 'foxel_migration_v2_done';
+
   /// 旧版本（单会话）遗留 key，仅用于迁移。
   static const _legacyBaseUrlKey = 'foxel_base_url';
   static const _legacyUsernameKey = 'foxel_username';
@@ -23,9 +27,14 @@ class AccountStore {
   static String tokenKey(String accountId) => 'foxel_acc_${accountId}_token';
 
   /// 读取全部账户，必要时执行一次旧版本迁移。
+  ///
+  /// 迁移判据：**索引 key 不存在**（真正的旧版本升级）才迁移。
+  /// 删除最后一个账户时索引会被写成 `[]`，此时索引存在 → 永不再迁移，
+  /// 避免「删光账户后重启又被迁移出一个默认账户」。
   Future<List<Account>> loadAccounts({bool migrate = true}) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_indexKey);
+    final hasIndex = raw != null;
     final accounts = <Account>[];
 
     if (raw != null && raw.isNotEmpty) {
@@ -52,8 +61,12 @@ class AccountStore {
       }
     }
 
-    if (accounts.isEmpty && migrate) {
+    final migratedBefore = prefs.getBool(_migrationKey) ?? false;
+    if (accounts.isEmpty && migrate && !hasIndex && !migratedBefore) {
       final migrated = _migrateLegacy(prefs);
+      // 无论是否迁移出账户，都打标记并清掉旧 key，杜绝二次迁移。
+      await prefs.setBool(_migrationKey, true);
+      await _purgeLegacyKeys(prefs);
       if (migrated != null) {
         await upsert(migrated);
         await setActiveId(migrated.id);
@@ -62,6 +75,19 @@ class AccountStore {
     }
 
     return accounts;
+  }
+
+  /// 清除旧版本遗留的会话 key。
+  Future<void> _purgeLegacyKeys(SharedPreferences prefs) async {
+    for (final key in <String>[
+      _legacyBaseUrlKey,
+      _legacyUsernameKey,
+      _legacyTokenKey,
+      _legacyEmailKey,
+      _legacyAvatarUrlKey,
+    ]) {
+      await prefs.remove(key);
+    }
   }
 
   Account? _migrateLegacy(SharedPreferences prefs) {
@@ -187,6 +213,13 @@ class AccountStore {
       } else {
         await prefs.setString(_activeKey, next.first.id);
       }
+    }
+
+    if (next.isEmpty) {
+      // 用户已删光账户：连同旧版本会话 key 一起清掉，并标记迁移已完成，
+      // 保证下次启动直接进入空态而不会复活出「默认账户」。
+      await prefs.setBool(_migrationKey, true);
+      await _purgeLegacyKeys(prefs);
     }
   }
 

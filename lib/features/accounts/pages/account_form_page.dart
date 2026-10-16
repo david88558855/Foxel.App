@@ -6,6 +6,7 @@ import 'package:foxel/core/api/foxel_api.dart';
 import 'package:foxel/core/models/account.dart';
 import 'package:foxel/core/storage/download_dir_store.dart';
 import 'package:foxel/core/theme/design_tokens.dart';
+import 'package:foxel/core/widgets/content_frame.dart';
 import 'package:foxel/features/accounts/widgets/account_avatar.dart';
 
 /// 新建 / 编辑账户表单。
@@ -213,7 +214,8 @@ class _AccountFormPageState extends State<AccountFormPage> {
         elevation: 0,
       ),
       body: SafeArea(
-        child: ListView(
+        child: ContentFrame(
+          child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
           children: [
             if (_isEdit)
@@ -364,6 +366,7 @@ class _AccountFormPageState extends State<AccountFormPage> {
               ),
             ],
           ],
+          ),
         ),
       ),
     );
