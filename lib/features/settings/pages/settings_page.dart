@@ -9,6 +9,7 @@ import 'package:foxel/core/storage/download_dir_store.dart';
 import 'package:foxel/core/theme/design_tokens.dart';
 import 'package:foxel/core/widgets/content_frame.dart';
 import 'package:foxel/features/accounts/widgets/account_avatar.dart';
+import 'package:foxel/core/app_version.dart';
 
 /// 设置页（底部导航第三个 Tab）。
 ///

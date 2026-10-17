@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate' show pid;
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';

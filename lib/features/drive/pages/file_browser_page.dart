@@ -2286,13 +2286,13 @@ class _FileGridTile extends StatelessWidget {
 
 /// 多选勾选标记（圆形）。
 class _SelectionMark extends StatelessWidget {
-  const _SelectionMark({required this.selected, this.size = 22});
+  const _SelectionMark({required this.selected});
 
   final bool selected;
-  final double size;
 
   @override
   Widget build(BuildContext context) {
+    const size = 22.0;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 120),
       width: size,
@@ -2314,7 +2314,7 @@ class _SelectionMark extends StatelessWidget {
         ],
       ),
       child: selected
-          ? Icon(Icons.check_rounded, size: size * 0.62, color: Colors.white)
+          ? const Icon(Icons.check_rounded, size: 13.6, color: Colors.white)
           : null,
     );
   }
