@@ -193,14 +193,10 @@ class RenamePlanner {
       for (var index = 0; index < targets.length; index++)
         _applyRule(targets[index], rule, index),
     ];
-    for (var index = 0; index < targets.length; index++) {
-      final target = targets[index];
-      final raw = rawNames[index];
-      final cleaned =
-          raw == null ? null : _sanitizeKeepingExtension(raw, target.isDir);
-      if (cleaned == null || cleaned.isEmpty || cleaned == target.name) {
-        occupied.add(target.name.toLowerCase());
-      }
+    // 本批所有原名都算占用：这样 A→B 且 B 也在本批（会被改成 C，或与 A 互换）
+    // 时会被判冲突。并发下发 rename 时服务端会撞名甚至覆盖，必须在预览阶段拦下。
+    for (final target in targets) {
+      occupied.add(target.name.toLowerCase());
     }
 
     for (var index = 0; index < targets.length; index++) {

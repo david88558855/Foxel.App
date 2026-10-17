@@ -77,10 +77,16 @@ class AccountStore {
       });
     }
 
-    if (migrate && (hasIndex || migratedBefore)) {
-      // 已经进入多账户体系：幂等清理历史残留的旧版 key，
-      // 否则老设备上删光账户后仍会被旧 token 再次迁移出账户。
-      await _cleanupLegacyKeys(prefs, accounts);
+    if (migrate && (hasIndex || migratedBefore) && !_legacyCleaned) {
+      // 清理会写盘，必须纳入串行队列并只执行一次，
+      // 否则启动期多次 loadAccounts 会形成不受保护的并发写。
+      await _serialized(() async {
+        if (_legacyCleaned) {
+          return;
+        }
+        await _cleanupLegacyKeys(prefs, accounts);
+        _legacyCleaned = true;
+      });
     }
 
     return accounts;
@@ -313,6 +319,9 @@ class AccountStore {
       await _purgeLegacyKeys(prefs);
     }
   }
+
+  /// 旧版 key 是否已清理（进程内幂等，避免重复写盘）。
+  bool _legacyCleaned = false;
 
   /// 批量移除账户（多选删除）。
   ///

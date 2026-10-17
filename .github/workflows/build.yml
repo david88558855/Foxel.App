@@ -113,6 +113,11 @@ jobs:
     name: Windows App
     runs-on: windows-latest
     steps:
+      # Git for Windows 会把某些路径视为 NTFS 非法路径而拒绝检出/清理，
+      # 关闭该保护可让 checkout 正常处理（含清理历史遗留的问题路径）。
+      - name: Disable NTFS path protection
+        shell: bash
+        run: git config --global core.protectNTFS false
       - name: Checkout
         uses: actions/checkout@v4
 

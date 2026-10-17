@@ -93,12 +93,11 @@ class PortablePrefsStore extends SharedPreferencesStorePlatform {
       final raw = jsonEncode(map);
       await tmp.writeAsString(raw, flush: true);
       try {
-        if (await file.exists()) {
-          await file.delete();
-        }
+        // 直接 rename 覆盖（Dart 在 Windows 上使用 MOVEFILE_REPLACE_EXISTING）。
+        // 先 delete 再 rename 会留下「数据文件不存在」的空窗，进程被杀即全量丢失。
         await tmp.rename(file.path);
       } catch (_) {
-        // Windows 上目标文件可能被杀软/其他实例短暂占用，降级为覆盖写。
+        // 目标被占用时降级为覆盖写，保证数据仍能落盘。
         await file.writeAsString(raw, flush: true);
         if (await tmp.exists()) {
           await tmp.delete();
@@ -107,7 +106,7 @@ class PortablePrefsStore extends SharedPreferencesStorePlatform {
       return true;
     } catch (error) {
       // 不静默吞掉：返回 false 让上层知道这次写入没有落盘。
-      debugPrint('[Foxel] 便携数据写入失败：${error.runtimeType}');
+      debugPrint('[Foxel] 便携数据写入失败：$error');
       return false;
     }
   }

@@ -56,7 +56,10 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _loadDownloadDir() async {
-    final dir = await DownloadDirStore.currentDirFor(widget.account.id);
+    final dir = await DownloadDirStore.currentDirFor(
+      widget.account.id,
+      account: widget.account,
+    );
     if (mounted) {
       setState(() => _downloadDir = dir);
     }
@@ -221,6 +224,10 @@ class _SettingsPageState extends State<SettingsPage> {
                           .getDirectoryPath(
                             dialogTitle: '选择下载目录',
                           );
+                      // 选择器期间对话框可能已被关闭，controller 随之释放
+                      if (!mounted) {
+                        return;
+                      }
                       if (selected != null && selected.isNotEmpty) {
                         controller.text = selected;
                       }

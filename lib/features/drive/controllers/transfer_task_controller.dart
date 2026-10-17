@@ -130,6 +130,9 @@ class TransferTaskController {
       remotePath: remotePath,
       localPath: localPath,
     );
+    if (task == null) {
+      return;
+    }
 
     unawaited(
       _runTask(
@@ -162,6 +165,9 @@ class TransferTaskController {
       remotePath: remotePath,
       localPath: outputFile.path,
     );
+    if (task == null) {
+      return;
+    }
 
     unawaited(
       _runTask(
@@ -184,26 +190,16 @@ class TransferTaskController {
     );
   }
 
-  TransferTask _addTask({
+  /// 新增任务；控制器已释放（账户被删除 / 页面销毁）时返回 null，
+  /// 调用方拿到 null 必须直接返回，避免发起无记录的真实传输。
+  TransferTask? _addTask({
     required TransferTaskType type,
     required String name,
     required String remotePath,
     required String localPath,
   }) {
     if (_disposed) {
-      return TransferTask(
-        id: -1,
-        type: type,
-        name: name,
-        remotePath: remotePath,
-        localPath: localPath,
-        transferredBytes: 0,
-        totalBytes: null,
-        status: TransferTaskStatus.failed,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        errorMessage: '账户已移除',
-      );
+      return null;
     }
     final now = DateTime.now();
     final task = TransferTask(

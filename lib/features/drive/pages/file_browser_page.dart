@@ -245,6 +245,10 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   }) async {
     final failures = <_BatchFailure<T>>[];
     for (var start = 0; start < items.length; start += concurrency) {
+      if (!mounted) {
+        // 页面已销毁（切账户等）：停止后续分片，避免继续改服务端数据。
+        break;
+      }
       final slice = items.skip(start).take(concurrency).toList();
       final results = await Future.wait(
         slice.map((item) async {
@@ -268,6 +272,9 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   /// 递归展开目录为其中的文件（相对当前目录的路径）。
   ///
   /// 服务端没有打包下载接口，因此文件夹按「展开为文件队列」处理。
+  /// 最近一次展开中读取失败的目录数（用于提示，不静默吞掉异常）。
+  int _skippedDirCount = 0;
+
   Future<List<String>> _collectFiles(
     String basePath,
     List<String> relativeDirs,
@@ -287,7 +294,8 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
           }
         }
       } catch (_) {
-        // 单个目录读取失败不影响其余文件。
+        // 单个目录读取失败不影响其余文件，但要计数并在结果里告知用户。
+        _skippedDirCount += 1;
       }
     }
     return files;
@@ -312,7 +320,12 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
         }
       }
       final folderCount = selected.where((entry) => entry.isDir).length;
+      _skippedDirCount = 0;
       if (!mounted) {
+        return;
+      }
+      if (files.isEmpty && _skippedDirCount > 0) {
+        _showMessage('选中的文件夹读取失败，请检查权限后重试');
         return;
       }
       if (files.isEmpty) {
@@ -376,14 +389,16 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     final sourcePaths = <String>{
       for (final entry in selected) FoxelApi.joinPath(base, entry.name),
     };
+    // 提前置位：目录选择页弹出期间若仍可点，会叠加第二次提交
+    setState(() => _batchBusy = true);
     final target = await Navigator.of(context).push<String>(
       MaterialPageRoute<String>(
         builder: (_) => DirectoryPickerPage(
           api: widget.api,
           title: move ? '移动到…' : '复制到…',
           initialPath: _path,
-          // 复制同样禁止选到自身及后代，避免自我嵌套式递归复制
-          blockedPaths: sourcePaths,
+          // 禁止选到自身、其后代，以及来源目录本身（否则 dst == src）
+          blockedPaths: <String>{base, ...sourcePaths},
           actionLabel: move ? '移动到此处' : '复制到此处',
         ),
       ),
@@ -436,6 +451,8 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
         .where((entry) => !entry.isDir)
         .fold<int>(0, (sum, entry) => sum + entry.size);
 
+    // 提前置位：确认框弹出期间禁止重复触发
+    setState(() => _batchBusy = true);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -504,6 +521,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     if (selected.isEmpty || _batchBusy) {
       return;
     }
+    setState(() => _batchBusy = true);
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (_) => BatchRenamePage(
@@ -695,25 +713,31 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     if (!mounted) {
       return;
     }
-    final result = await FilePicker.platform.pickFiles(withData: false);
-    final file = result?.files.single;
-    final localPath = file?.path;
-    if (file == null || localPath == null) {
-      return;
+    try {
+      final result = await FilePicker.platform.pickFiles(withData: false);
+      final file = result?.files.isNotEmpty == true ? result!.files.first : null;
+      final localPath = file?.path;
+      if (file == null || localPath == null) {
+        return;
+      }
+      final remotePath = FoxelApi.joinPath(_path, file.name);
+      widget.taskController.startUpload(
+        api: widget.api,
+        name: file.name,
+        remotePath: remotePath,
+        localPath: localPath,
+        onSuccess: () {
+          if (mounted) {
+            _refresh();
+          }
+        },
+      );
+      widget.onOpenTasks();
+    } catch (error) {
+      if (mounted) {
+        _showMessage('选择文件失败：$error');
+      }
     }
-    final remotePath = FoxelApi.joinPath(_path, file.name);
-    widget.taskController.startUpload(
-      api: widget.api,
-      name: file.name,
-      remotePath: remotePath,
-      localPath: localPath,
-      onSuccess: () {
-        if (mounted) {
-          _refresh();
-        }
-      },
-    );
-    widget.onOpenTasks();
   }
 
   Future<void> _renameEntry(FileEntry entry) async {
@@ -834,6 +858,9 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       if (!kIsWeb &&
           Platform.isAndroid &&
           !await DownloadDirStore.hasAllFilesAccess()) {
+        if (!mounted) {
+          return;
+        }
         final goSettings = await showDialog<bool>(
           context: context,
           builder: (dialogContext) {
@@ -858,6 +885,9 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
         );
         if (goSettings == true) {
           await DownloadDirStore.requestAllFilesAccess();
+        }
+        if (!mounted) {
+          return;
         }
         return;
       }
@@ -1015,12 +1045,16 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       if (a.isDir != b.isDir) {
         return a.isDir ? -1 : 1;
       }
-      final result = switch (_sortField) {
+      var result = switch (_sortField) {
         _SortField.name => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
         _SortField.size => a.size.compareTo(b.size),
         _SortField.modified => a.mtime.compareTo(b.mtime),
         _SortField.type => _fileKind(a).compareTo(_fileKind(b)),
       };
+      // 稳定 tie-break：List.sort 不稳定，同键项顺序不确定会影响批量重命名的序号
+      if (result == 0) {
+        result = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      }
       return _sortAscending ? result : -result;
     });
 

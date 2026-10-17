@@ -193,12 +193,21 @@ class _AppRootState extends State<AppRoot> {
       }
     }
 
+    // await 期间账户可能已被删除：写索引前必须复查，否则会复活已删账户。
+    final stillExists = await _exists(verified.id);
+    if (!mounted || !stillExists) {
+      return;
+    }
+
     await _store.upsert(verified);
     await _store.setActiveId(verified.id);
     await _store.touch(verified.id);
     await _reload();
     _lastBaseUrl = verified.baseUrl;
-    _api?.close();
+    // 「独立传输队列」关闭时不关闭旧连接，让跨账户任务继续跑完。
+    if (current?.isolatedTasks ?? true) {
+      _api?.close();
+    }
 
     if (!mounted) {
       return;
@@ -464,7 +473,9 @@ class _AppRootState extends State<AppRoot> {
   /// 删除当前账户时立即退出其登录态：切到剩余账户，没有则回到空态，
   /// 校验放到后台进行，避免界面停留在已删除的账户上。
   Future<bool> _confirmRemoveAccounts(List<Account> accounts) async {
-    if (accounts.isEmpty || _removingAccounts) {
+    // 与切换账户双向互斥：切换进行中不允许删除，否则 _switchTo 恢复执行后
+    // 会把已清掉沙箱的账户重新写回索引（僵尸账户）。
+    if (accounts.isEmpty || _removingAccounts || _switching) {
       return false;
     }
     final isBatch = accounts.length > 1;
@@ -521,9 +532,11 @@ class _AppRootState extends State<AppRoot> {
 
     // 1) 清除存储中的账户与其沙箱数据（串行执行，避免索引互相覆盖）
     final failed = await _store.removeAll(ids);
-    // 2) 释放这些账户的传输任务
+    // 2) 先中断在途任务，再释放控制器（否则真实传输仍继续写已删除账户的目录）
     for (final id in ids) {
-      _taskControllers.remove(id)?.dispose();
+      final controller = _taskControllers.remove(id);
+      controller?.interruptAll('账户已移除');
+      controller?.dispose();
     }
     await _reload();
 
@@ -579,6 +592,10 @@ class _AppRootState extends State<AppRoot> {
       return;
     }
     if (verified != null) {
+      // await 期间该账户可能已被删除或已切走：写回前复查。
+      if (_active?.id != current.id || !await _exists(current.id)) {
+        return;
+      }
       await _store.upsert(verified);
       await _reload();
       if (!mounted) {
@@ -594,8 +611,10 @@ class _AppRootState extends State<AppRoot> {
       _publishAccounts();
       return;
     }
-    await _store.markStale(current.id, stale: true);
-    await _reload();
+    if (_active?.id == current.id && await _exists(current.id)) {
+      await _store.markStale(current.id, stale: true);
+      await _reload();
+    }
     if (!mounted) {
       return;
     }

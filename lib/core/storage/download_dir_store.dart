@@ -163,11 +163,18 @@ class DownloadDirStore {
   }
 
   /// 账户下载目录：优先用户自定义，否则使用该账户沙箱默认目录。
-  static Future<String> currentDirFor(String accountId) async {
+  /// 账户下载目录：优先用户自定义，否则使用默认目录。
+  ///
+  /// 传入 [account] 时按「显示名称」计算默认目录，与设置页「恢复默认」、
+  /// 创建账户时落定的目录保持一致；仅传 id 时退回 id 命名（兼容旧调用）。
+  static Future<String> currentDirFor(String accountId, {Account? account}) async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(dirKeyFor(accountId));
     if (saved != null && saved.trim().isNotEmpty) {
       return saved.trim();
+    }
+    if (account != null) {
+      return defaultDirForAccount(account);
     }
     return defaultDirFor(accountId);
   }

@@ -179,6 +179,8 @@ class FoxelApi {
       _throwHttpError(http.Response.bytes(body, response.statusCode));
     }
 
+    // 若目标文件下载前就存在，失败时不能删除它（那是用户的文件）。
+    final existedBefore = await outputFile.exists();
     final sink = outputFile.openWrite();
     var received = 0;
     final total = response.contentLength;
@@ -195,13 +197,15 @@ class FoxelApi {
       } catch (_) {
         // 关闭失败无所谓，下面会清理掉残缺文件。
       }
-      // 失败时清掉残缺文件，避免用户误以为下载成功。
-      try {
-        if (await outputFile.exists()) {
-          await outputFile.delete();
+      // 失败时清掉本次新建的残缺文件，避免用户误以为下载成功。
+      if (!existedBefore) {
+        try {
+          if (await outputFile.exists()) {
+            await outputFile.delete();
+          }
+        } catch (_) {
+          // 清理失败不影响抛出原始错误。
         }
-      } catch (_) {
-        // 清理失败不影响抛出原始错误。
       }
       rethrow;
     }
