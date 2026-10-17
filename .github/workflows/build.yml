@@ -106,29 +106,15 @@ jobs:
           path: Foxel-linux-x86_64.tar.gz
           if-no-files-found: error
 
+  # 注意：仓库内任何文件都不要使用非 ASCII 文件名。
+  # 历史提交曾含中文文件名，Windows 端 git 视为非法路径，会让该 runner 上后续
+  # 所有 checkout 失败（仓库清理后仍可能因 runner 缓存残留而持续失败）。
   build-windows:
     name: Windows App
     runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: src
     steps:
-      # 先清空 runner 残留的工作区：历史提交曾含中文文件名，Windows 端 git 视为
-      # 非法路径，复用 runner 时 checkout / clean 都会因该残留失败。
-      - name: Clean stale workspace
-        shell: pwsh
-        # 必须显式指定：job 级的 working-directory（src）此时还不存在
-        working-directory: ${{ github.workspace }}
-        run: |
-          $root = "${{ github.workspace }}"
-          if (Test-Path -LiteralPath $root) {
-            Get-ChildItem -LiteralPath $root -Force -ErrorAction SilentlyContinue |
-              Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-          }
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          path: src
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
