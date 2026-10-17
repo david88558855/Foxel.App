@@ -559,6 +559,19 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     );
   }
 
+  /// 批量操作栏的底部偏移。
+  ///
+  /// 文件页是底部导航壳内的一个 tab，操作栏必须落在浮动导航之上：
+  /// 导航高 74 + 最小下边距 12 + 8 的间隙（有系统手势条时取更大的安全区）。
+  double _batchBarBottom(BuildContext context) {
+    const navHeight = 74.0;
+    const navMinInset = 12.0;
+    const gap = 8.0;
+    final safeBottom = MediaQuery.paddingOf(context).bottom;
+    final navBottom = safeBottom > navMinInset ? safeBottom : navMinInset;
+    return navBottom + navHeight + gap;
+  }
+
   String _nameOf(String path) {
     if (path == '/') {
       return '根目录';
@@ -1269,7 +1282,10 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                                   ),
                                 SliverToBoxAdapter(
                                   child: SizedBox(
-                                    height: _selecting ? 116 : 84,
+                                    // 多选态要同时避开底部导航与操作栏
+                                    height: _selecting
+                                        ? _batchBarBottom(context) + 74
+                                        : 84,
                                   ),
                                 ),
                               ],
@@ -1284,7 +1300,8 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                 Positioned(
                   left: 14,
                   right: 14,
-                  bottom: 14,
+                  // 抬到浮动导航之上，避免被遮挡后无法点击
+                  bottom: _batchBarBottom(context),
                   child: _BatchActionBar(
                     count: _selectedPaths.length,
                     busy: _batchBusy,
@@ -1721,19 +1738,13 @@ class _Toolbar extends StatelessWidget {
             onTap: onCreateFolder,
             tooltip: '新建文件夹',
           );
-          // 多选入口：文字按钮（设计稿 ⑦）
-          final selectButton = TextButton(
-            onPressed: onEnterSelection,
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              minimumSize: const Size(0, 36),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: const Text(
-              '选择',
-              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
-            ),
+          // 多选入口：与「升序 / 列表 / 新建」保持一致的带边框按钮
+          final selectButton = _ToolbarButton(
+            icon: Icons.check_circle_outline_rounded,
+            label: '选择',
+            compact: compact,
+            onTap: onEnterSelection,
+            tooltip: '进入多选模式',
           );
           final actions = Row(
             mainAxisSize: MainAxisSize.min,
@@ -2158,12 +2169,6 @@ class _FileGridTile extends StatelessWidget {
         onLongPress: selecting ? onToggle : onLongPress,
         child: Stack(
           children: [
-            if (selecting)
-              Positioned(
-                left: 4,
-                top: 4,
-                child: _SelectionMark(selected: selected),
-              ),
             Padding(
           padding: const EdgeInsets.all(8),
           child: Column(
@@ -2213,6 +2218,13 @@ class _FileGridTile extends StatelessWidget {
             ],
           ),
         ),
+            // 勾选标记放在最上层，避免被缩略图 / 图标遮住一半
+            if (selecting)
+              Positioned(
+                left: 4,
+                top: 4,
+                child: _SelectionMark(selected: selected),
+              ),
           ],
         ),
       ),
@@ -2235,11 +2247,19 @@ class _SelectionMark extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: selected ? AppColors.primary : Colors.white.withValues(alpha: 0.9),
+        color: selected ? AppColors.primary : Colors.white,
         border: Border.all(
           color: selected ? AppColors.primary : const Color(0xFFC6CFDD),
           width: 2,
         ),
+        // 落在缩略图 / 图标上时也能清晰分辨
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1F16202C),
+            blurRadius: 4,
+            offset: Offset(0, 1),
+          ),
+        ],
       ),
       child: selected
           ? Icon(Icons.check_rounded, size: size * 0.62, color: Colors.white)
