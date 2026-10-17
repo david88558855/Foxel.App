@@ -112,6 +112,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # 历史提交曾含中文文件名，Windows 端 git 视为非法路径；
+          # 复用 runner 时 git clean 会因残留该路径而失败，故跳过清理。
+          clean: false
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
