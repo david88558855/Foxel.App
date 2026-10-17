@@ -581,6 +581,15 @@ class _AppRootState extends State<AppRoot> {
     return true;
   }
 
+  /// 账户是否仍然存在。
+  ///
+  /// 异步等待期间账户可能已被删除：写索引 / 标记失效之前必须复查，
+  /// 否则会把已清掉沙箱的账户重新写回（僵尸账户）。
+  Future<bool> _exists(String accountId) async {
+    final accounts = await _store.loadAccounts(migrate: false);
+    return accounts.any((item) => item.id == accountId);
+  }
+
   /// 后台校验当前账户，失败则标记为失效（不阻塞界面切换）。
   Future<void> _validateActive() async {
     final current = _active;
