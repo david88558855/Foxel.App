@@ -13,6 +13,8 @@ import 'package:foxel/core/storage/download_dir_store.dart';
 import 'package:foxel/core/theme/design_tokens.dart';
 import 'package:foxel/features/accounts/widgets/account_avatar.dart';
 import 'package:foxel/features/drive/controllers/transfer_task_controller.dart';
+import 'package:foxel/features/drive/pages/batch_rename_page.dart';
+import 'package:foxel/features/drive/pages/directory_picker_page.dart';
 import 'package:foxel/features/media/pages/image_viewer_page.dart';
 import 'package:foxel/features/media/pages/video_player_page.dart';
 
@@ -54,6 +56,19 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   _SortField _sortField = _SortField.name;
   bool _sortAscending = true;
   _ViewMode _viewMode = _ViewMode.grid;
+
+  // ---- 多选批量操作 ----
+  /// 是否处于选择模式（点条目 = 勾选）。
+  bool _selecting = false;
+
+  /// 已选条目的完整路径。
+  final Set<String> _selectedPaths = <String>{};
+
+  /// 批量操作进行中：避免重复提交。
+  bool _batchBusy = false;
+
+  /// 当前可见条目的快照（供批量操作取名称 / 类型）。
+  List<FileEntry> _visibleEntries = const <FileEntry>[];
 
   @override
   void initState() {
@@ -147,6 +162,410 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       final maxOffset = _scrollController.position.maxScrollExtent;
       _scrollController.jumpTo(offset.clamp(0.0, maxOffset));
     });
+  }
+
+  // ---------------------------------------------------------------- 多选
+
+  /// 进入选择模式；[initial] 用于长按直接选中该项。
+  void _enterSelection([FileEntry? initial]) {
+    setState(() {
+      _selecting = true;
+      _selectedPaths.clear();
+      if (initial != null) {
+        _selectedPaths.add(FoxelApi.joinPath(_path, initial.name));
+      }
+    });
+  }
+
+  void _exitSelection() {
+    if (!_selecting && _selectedPaths.isEmpty) {
+      return;
+    }
+    setState(() {
+      _selecting = false;
+      _selectedPaths.clear();
+    });
+  }
+
+  void _toggleSelection(FileEntry entry) {
+    final fullPath = FoxelApi.joinPath(_path, entry.name);
+    setState(() {
+      if (!_selectedPaths.remove(fullPath)) {
+        _selectedPaths.add(fullPath);
+      }
+    });
+  }
+
+  void _selectAllVisible() {
+    final all = _visibleEntries
+        .map((entry) => FoxelApi.joinPath(_path, entry.name))
+        .toList();
+    final allSelected =
+        all.isNotEmpty && all.every(_selectedPaths.contains);
+    setState(() {
+      _selectedPaths.clear();
+      if (!allSelected) {
+        _selectedPaths.addAll(all);
+      }
+    });
+  }
+
+  /// 已选条目（按当前列表顺序）。
+  List<FileEntry> get _selectedEntries => <FileEntry>[
+    for (final entry in _visibleEntries)
+      if (_selectedPaths.contains(FoxelApi.joinPath(_path, entry.name))) entry,
+  ];
+
+  /// 当前目录中未被选中的条目名（用于重命名冲突检测）。
+  Set<String> get _unselectedNames => <String>{
+    for (final entry in _visibleEntries)
+      if (!_selectedPaths.contains(FoxelApi.joinPath(_path, entry.name)))
+        entry.name,
+  };
+
+  /// 受限并发执行，返回失败描述列表。
+  Future<List<String>> _runLimited<T>(
+    List<T> items,
+    Future<void> Function(T item) action, {
+    int concurrency = 3,
+  }) async {
+    final failures = <String>[];
+    for (var start = 0; start < items.length; start += concurrency) {
+      final slice = items.skip(start).take(concurrency).toList();
+      final results = await Future.wait(
+        slice.map((item) async {
+          try {
+            await action(item);
+            return null;
+          } catch (error) {
+            return '$error';
+          }
+        }),
+      );
+      for (final failure in results) {
+        if (failure != null) {
+          failures.add(failure);
+        }
+      }
+    }
+    return failures;
+  }
+
+  /// 递归展开目录为其中的文件（相对当前目录的路径）。
+  ///
+  /// 服务端没有打包下载接口，因此文件夹按「展开为文件队列」处理。
+  Future<List<String>> _collectFiles(List<String> relativeDirs) async {
+    final files = <String>[];
+    for (final dir in relativeDirs) {
+      try {
+        final listing = await widget.api.listDirectory(
+          FoxelApi.joinPath(_path, dir),
+        );
+        for (final child in listing.entries) {
+          final childPath = dir.isEmpty ? child.name : '$dir/${child.name}';
+          if (child.isDir) {
+            files.addAll(await _collectFiles(<String>[childPath]));
+          } else {
+            files.add(childPath);
+          }
+        }
+      } catch (_) {
+        // 单个目录读取失败不影响其余文件。
+      }
+    }
+    return files;
+  }
+
+  Future<void> _batchDownload() async {
+    final selected = _selectedEntries;
+    if (selected.isEmpty || _batchBusy) {
+      return;
+    }
+    setState(() => _batchBusy = true);
+    try {
+      final localDir = await DownloadDirStore.resolveFor(widget.account.id);
+      final files = <String>[];
+      for (final entry in selected) {
+        if (entry.isDir) {
+          files.addAll(await _collectFiles(<String>[entry.name]));
+        } else {
+          files.add(entry.name);
+        }
+      }
+      final folderCount = selected.where((entry) => entry.isDir).length;
+      if (files.isEmpty) {
+        _showMessage('选中的文件夹里没有可下载的文件');
+        return;
+      }
+      for (final relative in files) {
+        final name = relative.split('/').last;
+        widget.taskController.startDownload(
+          api: widget.api,
+          name: name,
+          remotePath: FoxelApi.joinPath(_path, relative),
+          outputFile: File(
+            '${localDir.path}${Platform.pathSeparator}$name',
+          ),
+        );
+      }
+      if (!mounted) {
+        return;
+      }
+      _exitSelection();
+      _showMessage(
+        '已加入 ${files.length} 个下载任务'
+        '${folderCount > 0 ? '（含 $folderCount 个文件夹的内容）' : ''}',
+      );
+    } catch (error) {
+      if (mounted) {
+        _showMessage(error.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _batchBusy = false);
+      }
+    }
+  }
+
+  /// 批量移动 / 复制：先选目标目录，再逐项执行。
+  Future<void> _batchTransfer({required bool move}) async {
+    final selected = _selectedEntries;
+    if (selected.isEmpty || _batchBusy) {
+      return;
+    }
+    final sourcePaths = <String>{
+      for (final entry in selected) FoxelApi.joinPath(_path, entry.name),
+    };
+    final target = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => DirectoryPickerPage(
+          api: widget.api,
+          title: move ? '移动到…' : '复制到…',
+          initialPath: _path,
+          blockedPaths: move ? sourcePaths : const <String>{},
+          actionLabel: move ? '移动到此处' : '复制到此处',
+        ),
+      ),
+    );
+    if (target == null || !mounted) {
+      return;
+    }
+
+    setState(() => _batchBusy = true);
+    try {
+      final failures = await _runLimited<FileEntry>(selected, (entry) async {
+        final src = FoxelApi.joinPath(_path, entry.name);
+        final dst = FoxelApi.joinPath(target, entry.name);
+        if (move) {
+          await widget.api.move(src: src, dst: dst);
+        } else {
+          await widget.api.copy(src: src, dst: dst);
+        }
+      });
+      if (!mounted) {
+        return;
+      }
+      final ok = selected.length - failures.length;
+      if (failures.isEmpty) {
+        _exitSelection();
+        _refresh();
+        _showMessage('已${move ? '移动' : '复制'} $ok 项到「${_nameOf(target)}」');
+      } else {
+        _refresh();
+        _showMessage(
+          '已${move ? '移动' : '复制'} $ok 项，${failures.length} 项失败：'
+          '${failures.first}',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _batchBusy = false);
+      }
+    }
+  }
+
+  Future<void> _batchDelete() async {
+    final selected = _selectedEntries;
+    if (selected.isEmpty || _batchBusy) {
+      return;
+    }
+    final folders = selected.where((entry) => entry.isDir).length;
+    final files = selected.length - folders;
+    final size = selected
+        .where((entry) => !entry.isDir)
+        .fold<int>(0, (sum, entry) => sum + entry.size);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('删除 ${selected.length} 项？'),
+        content: Text(
+          '包含 ${files > 0 ? '$files 个文件' : ''}'
+          '${files > 0 && folders > 0 ? '与' : ''}'
+          '${folders > 0 ? '$folders 个文件夹及其全部内容' : ''}'
+          '${size > 0 ? '，合计约 ${_formatSize(size)}' : ''}。\n'
+          '服务器上的文件将被删除，此操作不可撤销。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.danger,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('删除 ${selected.length} 项'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() => _batchBusy = true);
+    try {
+      final failures = await _runLimited<FileEntry>(selected, (entry) async {
+        await widget.api.deletePath(FoxelApi.joinPath(_path, entry.name));
+      });
+      if (!mounted) {
+        return;
+      }
+      final ok = selected.length - failures.length;
+      _refresh();
+      if (failures.isEmpty) {
+        _exitSelection();
+        _showMessage('已删除 $ok 项');
+      } else {
+        // 失败项保留选中，便于重试。
+        setState(() {
+          _selectedPaths.removeWhere(
+            (path) => !failures.any((failure) => failure.contains(path)),
+          );
+        });
+        _showMessage('已删除 $ok 项，${failures.length} 项失败');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _batchBusy = false);
+      }
+    }
+  }
+
+  Future<void> _openBatchRename() async {
+    final selected = _selectedEntries;
+    if (selected.isEmpty || _batchBusy) {
+      return;
+    }
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => BatchRenamePage(
+          api: widget.api,
+          directoryPath: _path,
+          targets: selected,
+          existingNames: _unselectedNames,
+        ),
+      ),
+    );
+    if (changed == true && mounted) {
+      _exitSelection();
+      _refresh();
+      _showMessage('批量重命名已完成');
+    }
+  }
+
+  void _showBatchMore() {
+    final selected = _selectedEntries;
+    if (selected.isEmpty) {
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.page,
+            0,
+            AppSpacing.page,
+            AppSpacing.page,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '对已选 ${selected.length} 项执行',
+                  style: AppText.sectionLabel,
+                ),
+              ),
+              _ActionRow(
+                icon: Icons.download_rounded,
+                label: '下载',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _batchDownload();
+                },
+              ),
+              _ActionRow(
+                icon: Icons.drive_file_move_outline,
+                label: '移动到…',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _batchTransfer(move: true);
+                },
+              ),
+              _ActionRow(
+                icon: Icons.copy_rounded,
+                label: '复制到…',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _batchTransfer(move: false);
+                },
+              ),
+              _ActionRow(
+                icon: Icons.drive_file_rename_outline_rounded,
+                label: '批量重命名',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _openBatchRename();
+                },
+              ),
+              _ActionRow(
+                icon: Icons.delete_outline_rounded,
+                label: '删除',
+                destructive: true,
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _batchDelete();
+                },
+              ),
+              _ActionRow(
+                icon: Icons.deselect_rounded,
+                label: '取消选择',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  setState(() => _selectedPaths.clear());
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _nameOf(String path) {
+    if (path == '/') {
+      return '根目录';
+    }
+    final trimmed = path.replaceAll(RegExp(r'/+$'), '');
+    final index = trimmed.lastIndexOf('/');
+    return index <= 0 ? trimmed : trimmed.substring(index + 1);
   }
 
   void _showMessage(String message) {
@@ -675,7 +1094,9 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
         backgroundColor: const Color(0xFFF4F7FA),
         body: SafeArea(
           bottom: false,
-          child: FutureBuilder<DirectoryListing>(
+          child: Stack(
+            children: [
+              FutureBuilder<DirectoryListing>(
             future: _listingFuture,
             builder: (context, snapshot) {
               final loading = snapshot.connectionState != ConnectionState.done;
@@ -691,6 +1112,8 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
               final visibleEntries = loading
                   ? const <FileEntry>[]
                   : _visibleEntries(entries);
+              // 供批量操作取名称 / 类型；搜索过滤后以可见项为准。
+              _visibleEntries = visibleEntries;
               final hasSearch = _searchQuery.trim().isNotEmpty;
               if (!loading &&
                   !snapshot.hasError &&
@@ -705,6 +1128,15 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                     account: widget.account,
                     onTap: widget.onOpenAccountCenter,
                   ),
+                  if (_selecting)
+                    _SelectionBar(
+                      selectedCount: _selectedPaths.length,
+                      totalCount: visibleEntries.length,
+                      busy: _batchBusy,
+                      onCancel: _exitSelection,
+                      onSelectAll: _selectAllVisible,
+                    )
+                  else
                   _Toolbar(
                     controller: _searchController,
                     query: _searchQuery,
@@ -743,6 +1175,9 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                       setState(() => _viewMode = mode);
                     },
                     onCreateFolder: _createFolder,
+                    onEnterSelection: visibleEntries.isEmpty
+                        ? null
+                        : () => _enterSelection(),
                   ),
                   Expanded(
                     child: loading
@@ -758,6 +1193,13 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                               controller: _scrollController,
                               physics: const AlwaysScrollableScrollPhysics(),
                               slivers: [
+                                if (_selecting && _selectedEntries.isNotEmpty)
+                                  SliverToBoxAdapter(
+                                    child: _SelectionSummary(
+                                      entries: _selectedEntries,
+                                      formatSize: _formatSize,
+                                    ),
+                                  ),
                                 if (entries.isEmpty)
                                   SliverFillRemaining(
                                     hasScrollBody: false,
@@ -799,8 +1241,14 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                                     formatSize: _formatSize,
                                     formatMtime: _formatMtime,
                                     fileKind: _fileKind,
-                                    onOpen: _openEntry,
+                                    selecting: _selecting,
+                                    selectedPaths: _selectedPaths,
+                                    onOpen: _selecting
+                                        ? _toggleSelection
+                                        : _openEntry,
                                     onMore: _showEntryActions,
+                                    onToggle: _toggleSelection,
+                                    onLongPress: _enterSelection,
                                   )
                                 else
                                   _FileList(
@@ -810,11 +1258,19 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                                     formatSize: _formatSize,
                                     formatMtime: _formatMtime,
                                     fileKind: _fileKind,
-                                    onOpen: _openEntry,
+                                    selecting: _selecting,
+                                    selectedPaths: _selectedPaths,
+                                    onOpen: _selecting
+                                        ? _toggleSelection
+                                        : _openEntry,
                                     onMore: _showEntryActions,
+                                    onToggle: _toggleSelection,
+                                    onLongPress: _enterSelection,
                                   ),
-                                const SliverToBoxAdapter(
-                                  child: SizedBox(height: 84),
+                                SliverToBoxAdapter(
+                                  child: SizedBox(
+                                    height: _selecting ? 116 : 84,
+                                  ),
                                 ),
                               ],
                             ),
@@ -823,9 +1279,28 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                 ],
               );
             },
+              ),
+              if (_selecting)
+                Positioned(
+                  left: 14,
+                  right: 14,
+                  bottom: 14,
+                  child: _BatchActionBar(
+                    count: _selectedPaths.length,
+                    busy: _batchBusy,
+                    onDownload: _batchDownload,
+                    onMove: () => _batchTransfer(move: true),
+                    onCopy: () => _batchTransfer(move: false),
+                    onDelete: _batchDelete,
+                    onMore: _showBatchMore,
+                  ),
+                ),
+            ],
           ),
         ),
-        floatingActionButton: Builder(
+        floatingActionButton: _selecting
+            ? null
+            : Builder(
           builder: (context) {
             final compact = MediaQuery.sizeOf(context).width < 560;
             final bottomInset = MediaQuery.of(context).viewPadding.bottom + 72;
@@ -866,6 +1341,236 @@ class _DirectorySummary {
   final int latestMtime;
 }
 
+/// 多选模式的顶部条：取消 / 已选择 N 项 / 全选。
+class _SelectionBar extends StatelessWidget {
+  const _SelectionBar({
+    required this.selectedCount,
+    required this.totalCount,
+    required this.busy,
+    required this.onCancel,
+    required this.onSelectAll,
+  });
+
+  final int selectedCount;
+  final int totalCount;
+  final bool busy;
+  final VoidCallback onCancel;
+  final VoidCallback onSelectAll;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.surface,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.sm,
+      ),
+      child: Row(
+        children: [
+          TextButton(
+            onPressed: busy ? null : onCancel,
+            child: const Text(
+              '取消',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w800,
+                color: AppColors.ink2,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              selectedCount == 0 ? '选择文件' : '已选择 $selectedCount 项',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 15.5,
+                fontWeight: FontWeight.w800,
+                color: AppColors.ink,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: busy || totalCount == 0 ? null : onSelectAll,
+            child: const Text(
+              '全选',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w800,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 选中项构成提示：X 个文件（合计体积）+ Y 个文件夹。
+class _SelectionSummary extends StatelessWidget {
+  const _SelectionSummary({
+    required this.entries,
+    required this.formatSize,
+  });
+
+  final List<FileEntry> entries;
+  final String Function(int) formatSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final folders = entries.where((entry) => entry.isDir).length;
+    final files = entries.length - folders;
+    final size = entries
+        .where((entry) => !entry.isDir)
+        .fold<int>(0, (sum, entry) => sum + entry.size);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.page,
+        AppSpacing.sm,
+        AppSpacing.page,
+        0,
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.primarySoft,
+          borderRadius: BorderRadius.circular(AppRadii.tile),
+        ),
+        child: Text(
+          '含 $files 个文件${size > 0 ? '（${formatSize(size)}）' : ''}'
+          '${folders > 0 ? ' + $folders 个文件夹' : ''}',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.primary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 多选模式的底部操作栏（悬浮胶囊）。
+class _BatchActionBar extends StatelessWidget {
+  const _BatchActionBar({
+    required this.count,
+    required this.busy,
+    required this.onDownload,
+    required this.onMove,
+    required this.onCopy,
+    required this.onDelete,
+    required this.onMore,
+  });
+
+  final int count;
+  final bool busy;
+  final VoidCallback onDownload;
+  final VoidCallback onMove;
+  final VoidCallback onCopy;
+  final VoidCallback onDelete;
+  final VoidCallback onMore;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = count > 0 && !busy;
+    return Material(
+      color: AppColors.surface,
+      clipBehavior: Clip.antiAlias,
+      elevation: 6,
+      shadowColor: const Color(0x1A8B97AA),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadii.nav),
+        side: const BorderSide(color: AppColors.border),
+      ),
+      child: SizedBox(
+        height: 62,
+        child: busy
+            ? const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : Row(
+                children: [
+                  _BatchAction(
+                    icon: Icons.download_rounded,
+                    label: '下载',
+                    color: AppColors.primary,
+                    onTap: enabled ? onDownload : null,
+                  ),
+                  _BatchAction(
+                    icon: Icons.drive_file_move_outline,
+                    label: '移动',
+                    onTap: enabled ? onMove : null,
+                  ),
+                  _BatchAction(
+                    icon: Icons.copy_rounded,
+                    label: '复制',
+                    onTap: enabled ? onCopy : null,
+                  ),
+                  _BatchAction(
+                    icon: Icons.delete_outline_rounded,
+                    label: '删除',
+                    color: AppColors.danger,
+                    onTap: enabled ? onDelete : null,
+                  ),
+                  _BatchAction(
+                    icon: Icons.more_horiz_rounded,
+                    label: '更多',
+                    onTap: enabled ? onMore : null,
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _BatchAction extends StatelessWidget {
+  const _BatchAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color = AppColors.ink2,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final effective = onTap == null ? AppColors.ink3 : color;
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        splashFactory: NoSplash.splashFactory,
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 20, color: effective),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+                color: effective,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _Toolbar extends StatelessWidget {
   const _Toolbar({
     required this.controller,
@@ -888,7 +1593,11 @@ class _Toolbar extends StatelessWidget {
     required this.formatSize,
     required this.formatMtime,
     required this.onOpenPath,
+    this.onEnterSelection,
   });
+
+  /// 进入多选模式；null 表示当前目录不可选（空目录 / 加载中）。
+  final VoidCallback? onEnterSelection;
 
   final TextEditingController controller;
   final String query;
@@ -1012,6 +1721,20 @@ class _Toolbar extends StatelessWidget {
             onTap: onCreateFolder,
             tooltip: '新建文件夹',
           );
+          // 多选入口：文字按钮（设计稿 ⑦）
+          final selectButton = TextButton(
+            onPressed: onEnterSelection,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              minimumSize: const Size(0, 36),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              '选择',
+              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+            ),
+          );
           final actions = Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1022,6 +1745,8 @@ class _Toolbar extends StatelessWidget {
               viewButton,
               const SizedBox(width: 4),
               createButton,
+              const SizedBox(width: 4),
+              selectButton,
             ],
           );
           return Container(
@@ -1319,6 +2044,10 @@ class _FileGrid extends StatelessWidget {
     required this.fileKind,
     required this.onOpen,
     required this.onMore,
+    required this.selecting,
+    required this.selectedPaths,
+    required this.onToggle,
+    required this.onLongPress,
   });
 
   final FoxelApi api;
@@ -1329,6 +2058,10 @@ class _FileGrid extends StatelessWidget {
   final String Function(FileEntry) fileKind;
   final ValueChanged<FileEntry> onOpen;
   final ValueChanged<FileEntry> onMore;
+  final bool selecting;
+  final Set<String> selectedPaths;
+  final ValueChanged<FileEntry> onToggle;
+  final ValueChanged<FileEntry> onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -1355,15 +2088,20 @@ class _FileGrid extends StatelessWidget {
           sliver: SliverGrid(
             delegate: SliverChildBuilderDelegate((context, index) {
               final entry = entries[index];
+              final fullPath = FoxelApi.joinPath(currentPath, entry.name);
               return _FileGridTile(
                 api: api,
                 entry: entry,
-                fullPath: FoxelApi.joinPath(currentPath, entry.name),
+                fullPath: fullPath,
                 formatSize: formatSize,
                 formatMtime: formatMtime,
                 fileKind: fileKind,
+                selecting: selecting,
+                selected: selectedPaths.contains(fullPath),
                 onOpen: () => onOpen(entry),
                 onMore: () => onMore(entry),
+                onToggle: () => onToggle(entry),
+                onLongPress: () => onLongPress(entry),
               );
             }, childCount: entries.length),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -1389,6 +2127,10 @@ class _FileGridTile extends StatelessWidget {
     required this.fileKind,
     required this.onOpen,
     required this.onMore,
+    required this.selecting,
+    required this.selected,
+    required this.onToggle,
+    required this.onLongPress,
   });
 
   final FoxelApi api;
@@ -1399,17 +2141,29 @@ class _FileGridTile extends StatelessWidget {
   final String Function(FileEntry) fileKind;
   final VoidCallback onOpen;
   final VoidCallback onMore;
+  final bool selecting;
+  final bool selected;
+  final VoidCallback onToggle;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Material(
-      color: Colors.white,
+      color: selected ? AppColors.primarySoft : Colors.white,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: onOpen,
-        onLongPress: onMore,
+        onTap: selecting ? onToggle : onOpen,
+        onLongPress: selecting ? onToggle : onLongPress,
+        child: Stack(
+          children: [
+            if (selecting)
+              Positioned(
+                left: 4,
+                top: 4,
+                child: _SelectionMark(selected: selected),
+              ),
         child: Padding(
           padding: const EdgeInsets.all(8),
           child: Column(
@@ -1443,22 +2197,53 @@ class _FileGridTile extends StatelessWidget {
                       ),
                     ),
                   ),
-                  SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: IconButton(
-                      tooltip: '更多',
-                      padding: EdgeInsets.zero,
-                      onPressed: onMore,
-                      icon: const Icon(Icons.more_horiz_rounded),
+                  if (!selecting)
+                    SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: IconButton(
+                        tooltip: '更多',
+                        padding: EdgeInsets.zero,
+                        onPressed: onMore,
+                        icon: const Icon(Icons.more_horiz_rounded),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ],
           ),
         ),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+/// 多选勾选标记（圆形）。
+class _SelectionMark extends StatelessWidget {
+  const _SelectionMark({required this.selected, this.size = 22});
+
+  final bool selected;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: selected ? AppColors.primary : Colors.white.withValues(alpha: 0.9),
+        border: Border.all(
+          color: selected ? AppColors.primary : const Color(0xFFC6CFDD),
+          width: 2,
+        ),
+      ),
+      child: selected
+          ? Icon(Icons.check_rounded, size: size * 0.62, color: Colors.white)
+          : null,
     );
   }
 }
@@ -1473,7 +2258,16 @@ class _FileList extends StatelessWidget {
     required this.fileKind,
     required this.onOpen,
     required this.onMore,
+    required this.selecting,
+    required this.selectedPaths,
+    required this.onToggle,
+    required this.onLongPress,
   });
+
+  final bool selecting;
+  final Set<String> selectedPaths;
+  final ValueChanged<FileEntry> onToggle;
+  final ValueChanged<FileEntry> onLongPress;
 
   final FoxelApi api;
   final List<FileEntry> entries;
@@ -1493,15 +2287,20 @@ class _FileList extends StatelessWidget {
         separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           final entry = entries[index];
+          final fullPath = FoxelApi.joinPath(currentPath, entry.name);
           return _FileListTile(
             api: api,
             entry: entry,
-            fullPath: FoxelApi.joinPath(currentPath, entry.name),
+            fullPath: fullPath,
             formatSize: formatSize,
             formatMtime: formatMtime,
             fileKind: fileKind,
+            selecting: selecting,
+            selected: selectedPaths.contains(fullPath),
             onOpen: () => onOpen(entry),
             onMore: () => onMore(entry),
+            onToggle: () => onToggle(entry),
+            onLongPress: () => onLongPress(entry),
           );
         },
       ),
@@ -1519,6 +2318,10 @@ class _FileListTile extends StatelessWidget {
     required this.fileKind,
     required this.onOpen,
     required this.onMore,
+    required this.selecting,
+    required this.selected,
+    required this.onToggle,
+    required this.onLongPress,
   });
 
   final FoxelApi api;
@@ -1529,21 +2332,29 @@ class _FileListTile extends StatelessWidget {
   final String Function(FileEntry) fileKind;
   final VoidCallback onOpen;
   final VoidCallback onMore;
+  final bool selecting;
+  final bool selected;
+  final VoidCallback onToggle;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Material(
-      color: Colors.white,
+      color: selected ? AppColors.primarySoft : Colors.white,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: onOpen,
-        onLongPress: onMore,
+        onTap: selecting ? onToggle : onOpen,
+        onLongPress: selecting ? onToggle : onLongPress,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
           child: Row(
             children: [
+              if (selecting) ...[
+                _SelectionMark(selected: selected),
+                const SizedBox(width: 10),
+              ],
               _EntryVisual(
                 api: api,
                 entry: entry,
@@ -1577,12 +2388,13 @@ class _FileListTile extends StatelessWidget {
                   ],
                 ),
               ),
-              IconButton(
-                tooltip: '更多',
-                visualDensity: VisualDensity.compact,
-                onPressed: onMore,
-                icon: const Icon(Icons.more_horiz_rounded),
-              ),
+              if (!selecting)
+                IconButton(
+                  tooltip: '更多',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onMore,
+                  icon: const Icon(Icons.more_horiz_rounded),
+                ),
             ],
           ),
         ),
