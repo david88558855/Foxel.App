@@ -169,11 +169,19 @@ void main() {
       );
       expect(result.single.newName, 'a_b_c_x.txt');
 
-      final reserved = RenamePlanner.preview(
+      // conreadme.txt 的 stem 是 conreadme，不是保留名，不该加前缀；
+      // 只有完整名恰好是保留名（con.txt）时才需要规避。
+      final notReserved = RenamePlanner.preview(
         targets: [file('readme.txt')],
         rule: const RenameRule(mode: RenameMode.affix, prefix: 'con'),
       );
-      expect(reserved.single.newName, startsWith('foxel_'));
+      expect(notReserved.single.newName, 'conreadme.txt');
+
+      final reserved = RenamePlanner.preview(
+        targets: [file('readme.txt')],
+        rule: const RenameRule(findText: 'readme', replaceText: 'con'),
+      );
+      expect(reserved.single.newName, 'foxel_con.txt');
     });
 
     test('超长名称按字素截断且不切断 emoji', () {
