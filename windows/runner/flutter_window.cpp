@@ -83,7 +83,8 @@ bool FlutterWindow::OnCreate() {
 
   // 启动即隐藏后没有任何视觉反馈，首次运行时提示一次"我在托盘"。
   if (ShouldShowFirstRunHint()) {
-    tray_.ShowBalloon(L"Foxel", L"已在系统托盘运行，右键托盘图标可显示主窗口。");
+    tray_.ShowBalloon(L"Foxel",
+                      L"已在系统托盘运行，右键托盘图标或双击图标可显示主窗口。");
   }
 
   return true;

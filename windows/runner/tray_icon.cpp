@@ -108,8 +108,30 @@ void TrayIcon::HandleCallback(WPARAM wparam, LPARAM lparam) {
   (void)wparam;
   // 默认版本下 lParam 的低位就是鼠标消息（WM_RBUTTONUP 等）。
   const UINT event = static_cast<UINT>(LOWORD(lparam));
-  if (event == WM_RBUTTONUP || event == WM_CONTEXTMENU) {
-    ShowContextMenu();
+  switch (event) {
+    case WM_LBUTTONDBLCLK:
+      // 左键双击 = 菜单「显示主窗口」，复用同一出口。
+      // 单击不响应（WM_LBUTTONUP 不处理），避免误触把窗口叫出来。
+      InvokeShow();
+      break;
+    case WM_RBUTTONUP:
+    case WM_CONTEXTMENU:
+      ShowContextMenu();
+      break;
+    default:
+      break;
+  }
+}
+
+void TrayIcon::InvokeShow() {
+  if (on_show_) {
+    on_show_();
+  }
+}
+
+void TrayIcon::InvokeExit() {
+  if (on_exit_) {
+    on_exit_();
   }
 }
 
@@ -142,13 +164,9 @@ void TrayIcon::ShowContextMenu() {
   ::PostMessageW(owner_, WM_NULL, 0, 0);
 
   if (command == kCommandShowWindow) {
-    if (on_show_) {
-      on_show_();
-    }
+    InvokeShow();
   } else if (command == kCommandExit) {
-    if (on_exit_) {
-      on_exit_();
-    }
+    InvokeExit();
   }
 }
 

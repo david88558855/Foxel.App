@@ -12,6 +12,7 @@
 //
 // 需求约束：
 //   * 右键菜单只有「显示主窗口」和「退出」两项，不加分隔线 / 图标 / 子菜单；
+//   * 左键双击托盘图标 = 菜单「显示主窗口」，两者共用同一回调，行为必须一致；
 //   * 退出时必须先摘图标再销毁窗口，否则任务栏会残留"幽灵图标"。
 class TrayIcon {
  public:
@@ -48,6 +49,10 @@ class TrayIcon {
   void FillData(NOTIFYICONDATAW* data) const;
   bool AddIcon();
   void ShowContextMenu();
+  // 唯一的"显示主窗口"出口：右键菜单项与左键双击都走这里，
+  // 保证两种触发方式的执行路径完全相同。
+  void InvokeShow();
+  void InvokeExit();
 
   HWND owner_ = nullptr;
   UINT callback_message_ = 0;
