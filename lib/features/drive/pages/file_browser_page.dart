@@ -68,7 +68,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   bool _batchBusy = false;
 
   /// 当前可见条目的快照（供批量操作取名称 / 类型）。
-  List<FileEntry> _visibleEntries = const <FileEntry>[];
+  List<FileEntry> _visibleEntryList = const <FileEntry>[];
 
   @override
   void initState() {
@@ -197,7 +197,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   }
 
   void _selectAllVisible() {
-    final all = _visibleEntries
+    final all = _visibleEntryList
         .map((entry) => FoxelApi.joinPath(_path, entry.name))
         .toList();
     final allSelected =
@@ -212,13 +212,13 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
 
   /// 已选条目（按当前列表顺序）。
   List<FileEntry> get _selectedEntries => <FileEntry>[
-    for (final entry in _visibleEntries)
+    for (final entry in _visibleEntryList)
       if (_selectedPaths.contains(FoxelApi.joinPath(_path, entry.name))) entry,
   ];
 
   /// 当前目录中未被选中的条目名（用于重命名冲突检测）。
   Set<String> get _unselectedNames => <String>{
-    for (final entry in _visibleEntries)
+    for (final entry in _visibleEntryList)
       if (!_selectedPaths.contains(FoxelApi.joinPath(_path, entry.name)))
         entry.name,
   };
@@ -1113,7 +1113,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                   ? const <FileEntry>[]
                   : _visibleEntries(entries);
               // 供批量操作取名称 / 类型；搜索过滤后以可见项为准。
-              _visibleEntries = visibleEntries;
+              _visibleEntryList = visibleEntries;
               final hasSearch = _searchQuery.trim().isNotEmpty;
               if (!loading &&
                   !snapshot.hasError &&
@@ -2164,7 +2164,7 @@ class _FileGridTile extends StatelessWidget {
                 top: 4,
                 child: _SelectionMark(selected: selected),
               ),
-        child: Padding(
+            Padding(
           padding: const EdgeInsets.all(8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
