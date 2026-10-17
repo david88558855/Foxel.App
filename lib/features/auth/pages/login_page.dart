@@ -394,8 +394,10 @@ class _LoginPageState extends State<LoginPage> {
       _errorText = null;
       _statusText = '正在登录';
     });
-    final client = FoxelApi(baseUrl: _baseUrlController.text);
     try {
+      // 放在 try 内：地址为空 / 非法时构造会抛异常，
+      // 若在外面构造会导致 _loggingIn 无法复位，按钮永久卡在「登录中」。
+      final client = FoxelApi(baseUrl: _baseUrlController.text);
       final session = await client.login(
         username: _usernameController.text,
         password: _passwordController.text,

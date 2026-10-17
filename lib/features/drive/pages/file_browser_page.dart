@@ -44,6 +44,14 @@ class FileBrowserPage extends StatefulWidget {
   State<FileBrowserPage> createState() => _FileBrowserPageState();
 }
 
+/// 批量操作中的单项失败记录。
+class _BatchFailure<T> {
+  const _BatchFailure({required this.item, required this.error});
+
+  final T item;
+  final String error;
+}
+
 class _FileBrowserPageState extends State<FileBrowserPage> {
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
@@ -69,6 +77,9 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
 
   /// 当前可见条目的快照（供批量操作取名称 / 类型）。
   List<FileEntry> _visibleEntryList = const <FileEntry>[];
+
+  /// 当前目录的完整条目（含被搜索隐藏的），用于重命名冲突检测。
+  List<FileEntry> _allEntries = const <FileEntry>[];
 
   @override
   void initState() {
@@ -142,6 +153,9 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       _pendingRestorePath = nextPath;
       _searchController.clear();
       _searchQuery = '';
+      // 切换目录即退出多选：否则会留下指向旧目录的「幽灵选中」。
+      _selecting = false;
+      _selectedPaths.clear();
       _listingFuture = widget.api.listDirectory(_path);
     });
     unawaited(_saveBrowseState());
@@ -218,18 +232,18 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
 
   /// 当前目录中未被选中的条目名（用于重命名冲突检测）。
   Set<String> get _unselectedNames => <String>{
-    for (final entry in _visibleEntryList)
+    for (final entry in _allEntries)
       if (!_selectedPaths.contains(FoxelApi.joinPath(_path, entry.name)))
         entry.name,
   };
 
-  /// 受限并发执行，返回失败描述列表。
-  Future<List<String>> _runLimited<T>(
+  /// 受限并发执行；返回失败项（含原始条目），便于精确重试。
+  Future<List<_BatchFailure<T>>> _runLimited<T>(
     List<T> items,
     Future<void> Function(T item) action, {
     int concurrency = 3,
   }) async {
-    final failures = <String>[];
+    final failures = <_BatchFailure<T>>[];
     for (var start = 0; start < items.length; start += concurrency) {
       final slice = items.skip(start).take(concurrency).toList();
       final results = await Future.wait(
@@ -238,7 +252,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
             await action(item);
             return null;
           } catch (error) {
-            return '$error';
+            return _BatchFailure<T>(item: item, error: '$error');
           }
         }),
       );
@@ -254,17 +268,20 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   /// 递归展开目录为其中的文件（相对当前目录的路径）。
   ///
   /// 服务端没有打包下载接口，因此文件夹按「展开为文件队列」处理。
-  Future<List<String>> _collectFiles(List<String> relativeDirs) async {
+  Future<List<String>> _collectFiles(
+    String basePath,
+    List<String> relativeDirs,
+  ) async {
     final files = <String>[];
     for (final dir in relativeDirs) {
       try {
         final listing = await widget.api.listDirectory(
-          FoxelApi.joinPath(_path, dir),
+          FoxelApi.joinPath(basePath, dir),
         );
         for (final child in listing.entries) {
           final childPath = dir.isEmpty ? child.name : '$dir/${child.name}';
           if (child.isDir) {
-            files.addAll(await _collectFiles(<String>[childPath]));
+            files.addAll(await _collectFiles(basePath, <String>[childPath]));
           } else {
             files.add(childPath);
           }
@@ -281,30 +298,52 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     if (selected.isEmpty || _batchBusy) {
       return;
     }
+    // 快照目录：批量进行中若用户返回上级目录，仍按发起时的目录执行。
+    final base = _path;
     setState(() => _batchBusy = true);
     try {
       final localDir = await DownloadDirStore.resolveFor(widget.account.id);
       final files = <String>[];
       for (final entry in selected) {
         if (entry.isDir) {
-          files.addAll(await _collectFiles(<String>[entry.name]));
+          files.addAll(await _collectFiles(base, <String>[entry.name]));
         } else {
           files.add(entry.name);
         }
       }
       final folderCount = selected.where((entry) => entry.isDir).length;
+      if (!mounted) {
+        return;
+      }
       if (files.isEmpty) {
         _showMessage('选中的文件夹里没有可下载的文件');
         return;
       }
       for (final relative in files) {
+        if (!mounted) {
+          return;
+        }
         final name = relative.split('/').last;
+        // 保留相对目录结构，避免同名的子目录文件互相覆盖。
+        final relativeDir = relative.contains('/')
+            ? relative.substring(0, relative.lastIndexOf('/'))
+            : '';
+        var target = localDir;
+        if (relativeDir.isNotEmpty) {
+          target = Directory(
+            '${localDir.path}${Platform.pathSeparator}'
+            '${relativeDir.replaceAll('/', Platform.pathSeparator)}',
+          );
+          if (!await target.exists()) {
+            await target.create(recursive: true);
+          }
+        }
         widget.taskController.startDownload(
           api: widget.api,
           name: name,
-          remotePath: FoxelApi.joinPath(_path, relative),
+          remotePath: FoxelApi.joinPath(base, relative),
           outputFile: File(
-            '${localDir.path}${Platform.pathSeparator}$name',
+            '${target.path}${Platform.pathSeparator}$name',
           ),
         );
       }
@@ -333,8 +372,9 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     if (selected.isEmpty || _batchBusy) {
       return;
     }
+    final base = _path;
     final sourcePaths = <String>{
-      for (final entry in selected) FoxelApi.joinPath(_path, entry.name),
+      for (final entry in selected) FoxelApi.joinPath(base, entry.name),
     };
     final target = await Navigator.of(context).push<String>(
       MaterialPageRoute<String>(
@@ -342,7 +382,8 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
           api: widget.api,
           title: move ? '移动到…' : '复制到…',
           initialPath: _path,
-          blockedPaths: move ? sourcePaths : const <String>{},
+          // 复制同样禁止选到自身及后代，避免自我嵌套式递归复制
+          blockedPaths: sourcePaths,
           actionLabel: move ? '移动到此处' : '复制到此处',
         ),
       ),
@@ -354,7 +395,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     setState(() => _batchBusy = true);
     try {
       final failures = await _runLimited<FileEntry>(selected, (entry) async {
-        final src = FoxelApi.joinPath(_path, entry.name);
+        final src = FoxelApi.joinPath(base, entry.name);
         final dst = FoxelApi.joinPath(target, entry.name);
         if (move) {
           await widget.api.move(src: src, dst: dst);
@@ -374,7 +415,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
         _refresh();
         _showMessage(
           '已${move ? '移动' : '复制'} $ok 项，${failures.length} 项失败：'
-          '${failures.first}',
+          '${failures.first.error}',
         );
       }
     } finally {
@@ -426,10 +467,11 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       return;
     }
 
+    final base = _path;
     setState(() => _batchBusy = true);
     try {
       final failures = await _runLimited<FileEntry>(selected, (entry) async {
-        await widget.api.deletePath(FoxelApi.joinPath(_path, entry.name));
+        await widget.api.deletePath(FoxelApi.joinPath(base, entry.name));
       });
       if (!mounted) {
         return;
@@ -440,11 +482,13 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
         _exitSelection();
         _showMessage('已删除 $ok 项');
       } else {
-        // 失败项保留选中，便于重试。
+        // 失败项保留选中，便于重试（按条目精确剔除成功项）。
+        final failedPaths = <String>{
+          for (final failure in failures)
+            FoxelApi.joinPath(base, failure.item.name),
+        };
         setState(() {
-          _selectedPaths.removeWhere(
-            (path) => !failures.any((failure) => failure.contains(path)),
-          );
+          _selectedPaths.retainWhere(failedPaths.contains);
         });
         _showMessage('已删除 $ok 项，${failures.length} 项失败');
       }
@@ -1097,9 +1141,15 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: _path == '/',
+      // 多选态下返回键优先退出选择，而不是跳上级目录
+      canPop: !_selecting && _path == '/',
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _path != '/') {
+        if (didPop) {
+          return;
+        }
+        if (_selecting) {
+          _exitSelection();
+        } else if (_path != '/') {
           _openPath(FoxelApi.parentPath(_path));
         }
       },
@@ -1127,6 +1177,8 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                   : _visibleEntries(entries);
               // 供批量操作取名称 / 类型；搜索过滤后以可见项为准。
               _visibleEntryList = visibleEntries;
+              // 冲突检测必须覆盖完整条目，否则被搜索隐藏的同名文件会被覆盖。
+              _allEntries = entries;
               final hasSearch = _searchQuery.trim().isNotEmpty;
               if (!loading &&
                   !snapshot.hasError &&

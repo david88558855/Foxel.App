@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:foxel/core/api/foxel_api.dart';
+import 'package:foxel/core/api/foxel_api_exception.dart';
 import 'package:foxel/core/models/account.dart';
 import 'package:foxel/core/models/accounts_snapshot.dart';
 import 'package:foxel/core/models/isolation_policy.dart';
@@ -121,8 +122,12 @@ class _AppRootState extends State<AppRoot> {
         isStale: false,
         lastUsedAt: DateTime.now(),
       );
+    } on FoxelApiException catch (error) {
+      // 只有凭证类错误（401/403）才判定为失效。
+      return error.isUnauthorized ? null : account;
     } catch (_) {
-      return null;
+      // 网络 / DNS 等异常：保持原状态，不把账户标记为失效。
+      return account;
     } finally {
       api.close();
     }

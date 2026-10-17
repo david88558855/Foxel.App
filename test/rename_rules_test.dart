@@ -117,6 +117,17 @@ void main() {
   });
 
   group('冲突与边界', () {
+    test('A 改名为 B 且 B 在本批未改名时，也要判冲突（防覆盖）', () {
+      // 选了 A.txt 与 B.txt，规则只命中 A.txt：B.txt 原名仍占用目录。
+      final result = RenamePlanner.preview(
+        targets: [file('A.txt'), file('B.txt')],
+        rule: const RenameRule(findText: 'A', replaceText: 'B'),
+      );
+      expect(result[0].conflictReason, '目标名已存在');
+      expect(result[0].isUsable, isFalse);
+      expect(result[1].isSkipped, isTrue);
+    });
+
     test('目标名与目录中既有条目重名时报冲突', () {
       final result = RenamePlanner.preview(
         targets: [file('旧.txt')],

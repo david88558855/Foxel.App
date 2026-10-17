@@ -45,6 +45,15 @@ class _BatchRenamePageState extends State<BatchRenamePage> {
   int _done = 0;
   String? _failureSummary;
 
+  /// 实际成功改名的数量（用于返回调用方，避免「只看预览就返回」被当成成功）。
+  int _appliedCount = 0;
+
+  /// 待处理条目（成功后移除，避免用旧名重试）。
+  late List<FileEntry> _targets = widget.targets;
+
+  /// 已被占用的名称（成功后并入新名，保持冲突检测准确）。
+  late Set<String> _existingNames = widget.existingNames.toSet();
+
   @override
   void dispose() {
     _findController.dispose();
@@ -56,14 +65,14 @@ class _BatchRenamePageState extends State<BatchRenamePage> {
   }
 
   List<RenameTarget> get _renameTargets => <RenameTarget>[
-    for (final entry in widget.targets)
+    for (final entry in _targets)
       RenameTarget(name: entry.name, isDir: entry.isDir),
   ];
 
   List<RenamePreviewItem> get _preview => RenamePlanner.preview(
     targets: _renameTargets,
     rule: _rule,
-    existingNames: widget.existingNames,
+    existingNames: _existingNames,
   );
 
   void _updateRule(RenameRule next) {
@@ -86,6 +95,7 @@ class _BatchRenamePageState extends State<BatchRenamePage> {
     });
 
     final failures = <String>[];
+    final failedItems = <RenamePreviewItem>[];
     var completed = 0;
 
     // 受限并发 3：避免一次性打满服务端。
@@ -101,13 +111,15 @@ class _BatchRenamePageState extends State<BatchRenamePage> {
             );
             return null;
           } catch (error) {
-            return '${item.target.name}：$error';
+            // 把失败项与条目本身绑定，便于精确剔除 / 重试。
+            return (item: item, error: '$error');
           }
         }),
       );
       for (final failure in results) {
         if (failure != null) {
-          failures.add(failure);
+          failures.add('${failure.item.target.name}：${failure.error}');
+          failedItems.add(failure.item);
         }
       }
       completed += slice.length;
@@ -128,6 +140,29 @@ class _BatchRenamePageState extends State<BatchRenamePage> {
     });
 
     final successCount = items.length - failures.length;
+    _appliedCount += successCount;
+    if (successCount > 0) {
+      // 刷新本地快照：已成功的项移出待处理列表，新名并入占用集合，
+      // 这样重试时不会用已不存在的旧名。
+      final failedNames = <String>{
+        for (final item in failedItems) item.target.name,
+      };
+      final newNames = <String>{
+        for (final item in items)
+          if (item.isUsable && !failedNames.contains(item.target.name))
+            item.newName,
+      };
+      final appliedNames = <String>{
+        for (final item in items)
+          if (!failedNames.contains(item.target.name)) item.target.name,
+      };
+      setState(() {
+        _targets = _targets
+            .where((entry) => !appliedNames.contains(entry.name))
+            .toList();
+        _existingNames.addAll(newNames);
+      });
+    }
     if (failures.isEmpty) {
       Navigator.of(context).pop(true);
       return;
@@ -154,7 +189,7 @@ class _BatchRenamePageState extends State<BatchRenamePage> {
         title: const Text('批量重命名'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.of(context).pop(changed > 0),
+          onPressed: () => Navigator.of(context).pop(_appliedCount > 0),
         ),
       ),
       body: SafeArea(
@@ -171,7 +206,7 @@ class _BatchRenamePageState extends State<BatchRenamePage> {
                     AppSpacing.page,
                   ),
                   children: [
-                    _SummaryBar(targets: widget.targets, preview: preview),
+                    _SummaryBar(targets: _targets, preview: preview),
                     const SizedBox(height: AppSpacing.lg),
                     const _SectionLabel('重命名方式'),
                     _ModePicker(
@@ -207,7 +242,7 @@ class _BatchRenamePageState extends State<BatchRenamePage> {
                 running: _running,
                 done: _done,
                 total: usable,
-                onCancel: () => Navigator.of(context).pop(changed > 0),
+                onCancel: () => Navigator.of(context).pop(_appliedCount > 0),
                 onApply: usable == 0 || _running ? null : _apply,
               ),
             ],

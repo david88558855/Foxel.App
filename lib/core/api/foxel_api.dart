@@ -189,9 +189,15 @@ class FoxelApi {
         sink.add(chunk);
         onProgress?.call(received, total);
       }
-    } finally {
-      await sink.close();
+    } catch (_) {
+      await sink.close().catchError((_) {});
+      // 失败时清掉残缺文件，避免用户误以为下载成功。
+      if (await outputFile.exists()) {
+        await outputFile.delete().catchError((_) {});
+      }
+      rethrow;
     }
+    await sink.close();
     onProgress?.call(received, total);
   }
 
@@ -339,19 +345,28 @@ class FoxelApi {
     if (decoded is Map<String, dynamic>) {
       _throwDecodedError(decoded, response.statusCode);
     }
-    throw FoxelApiException('请求失败：${response.statusCode}');
+    throw FoxelApiException(
+      '请求失败：${response.statusCode}',
+      statusCode: response.statusCode,
+    );
   }
 
   Never _throwDecodedError(Map<String, dynamic> body, int statusCode) {
     final detail = body['detail'];
     if (detail is String && detail.isNotEmpty) {
-      throw FoxelApiException(detail);
+      throw FoxelApiException(detail, statusCode: statusCode);
     }
     if (detail is List) {
-      throw FoxelApiException(detail.map((item) => '$item').join('; '));
+      throw FoxelApiException(
+        detail.map((item) => '$item').join('; '),
+        statusCode: statusCode,
+      );
     }
     final message = body['msg'] as String? ?? body['message'] as String?;
-    throw FoxelApiException(message ?? '请求失败：$statusCode');
+    throw FoxelApiException(
+      message ?? '请求失败：$statusCode',
+      statusCode: statusCode,
+    );
   }
 
   void close() {

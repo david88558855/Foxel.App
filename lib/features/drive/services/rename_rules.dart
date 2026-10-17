@@ -186,9 +186,26 @@ class RenamePlanner {
         .map((name) => name.toLowerCase())
         .toSet();
 
+    // 先算一遍所有新名。本批中「不会被改名」的项，其原名仍然占用目录：
+    // 否则 A→B 而 B 恰好本批不变（不含查找文本 / 名称未变化）时会漏判冲突，
+    // 执行阶段就会把 B 覆盖掉。
+    final rawNames = <String?>[
+      for (var index = 0; index < targets.length; index++)
+        _applyRule(targets[index], rule, index),
+    ];
     for (var index = 0; index < targets.length; index++) {
       final target = targets[index];
-      final rawNew = _applyRule(target, rule, index);
+      final raw = rawNames[index];
+      final cleaned =
+          raw == null ? null : _sanitizeKeepingExtension(raw, target.isDir);
+      if (cleaned == null || cleaned.isEmpty || cleaned == target.name) {
+        occupied.add(target.name.toLowerCase());
+      }
+    }
+
+    for (var index = 0; index < targets.length; index++) {
+      final target = targets[index];
+      final rawNew = rawNames[index];
       if (rawNew == null) {
         results.add(
           RenamePreviewItem(

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate' show pid;
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
@@ -23,6 +24,10 @@ class PortablePrefsStore extends SharedPreferencesStorePlatform {
   final File file;
 
   Map<String, Object>? _cache;
+
+  /// 读取失败后置位：此时**禁止任何写入**，否则会把空数据覆盖到已有文件上，
+  /// 造成账户 / token / 下载目录配置被静默清空。
+  bool _loadFailed = false;
 
   /// 写队列：所有「改内存 → 落盘」串行执行。
   ///
@@ -48,9 +53,12 @@ class PortablePrefsStore extends SharedPreferencesStorePlatform {
         }
       }
     } catch (error) {
+      // 读取失败：不建立缓存，并阻止后续写入（保住磁盘上的数据）。
+      _loadFailed = true;
       if (kDebugMode) {
-        debugPrint('[Foxel] 便携数据读取失败，按空数据启动：$error');
+        debugPrint('[Foxel] 便携数据读取失败，本次会话不写盘：$error');
       }
+      return <String, Object>{};
     }
     _cache = map;
     return map;
@@ -60,6 +68,11 @@ class PortablePrefsStore extends SharedPreferencesStorePlatform {
   Future<bool> _mutate(void Function(Map<String, Object> map) change) {
     final result = _writeChain.then((_) async {
       final map = await _load();
+      if (_loadFailed) {
+        // 磁盘数据读不出来，绝不覆盖写入。
+        debugPrint('[Foxel] 数据文件读取异常，已跳过本次写入');
+        return false;
+      }
       change(map);
       return _persist();
     });
@@ -71,7 +84,8 @@ class PortablePrefsStore extends SharedPreferencesStorePlatform {
   /// 原子写：先写临时文件，再替换目标；目标被占用时回退为覆盖写。
   Future<bool> _persist() async {
     final map = _cache ?? <String, Object>{};
-    final tmp = File('${file.path}.tmp');
+    // 临时文件带 pid：多个实例同时启动时不会争用同一个 tmp。
+    final tmp = File('${file.path}.${pid}.tmp');
     try {
       final dir = file.parent;
       if (!await dir.exists()) {
