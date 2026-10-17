@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Foxel App · Windows 系统托盘功能设计稿 v1.0（待确认）</title>
+<style>
+  :root{
+    --bg:#F4F7FA;
+    --page:#F7F9FC;
+    --card:#FFFFFF;
+    --ink:#16202C;
+    --ink2:#5C6B7A;
+    --ink3:#93A0AF;
+    --line:#E7ECF2;
+    --brand:#4C6FFF;
+    --brand-soft:#EAF0FF;
+    --ok:#12B886;
+    --ok-soft:#E5F8F1;
+    --warn:#F59E0B;
+    --warn-soft:#FFF3E0;
+    --danger:#E5484D;
+    --danger-soft:#FDECEC;
+    --purple:#6E56CF;
+    --purple-soft:#F0EDFB;
+    --shadow:0 10px 30px rgba(22,32,44,.08);
+    --radius:20px;
+    --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;background:var(--page);color:var(--ink);
+    font-family:"PingFang SC","Microsoft YaHei","Hiragino Sans GB",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.6;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:36px 24px 90px;}
+
+  .hero{
+    background:#FFFFFF;
+    border:1px solid var(--line);border-radius:28px;padding:32px 34px;box-shadow:var(--shadow);
+  }
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;background:var(--brand-soft);color:var(--brand);
+    font-size:12px;font-weight:700;letter-spacing:.4px;padding:6px 12px;border-radius:999px;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--brand);}
+  .hero h1{margin:14px 0 8px;font-size:29px;font-weight:800;letter-spacing:-.4px;}
+  .hero p{margin:0;color:var(--ink2);font-size:14.5px;max-width:900px;}
+  .meta-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px;}
+  .chip{
+    background:#fff;border:1px solid var(--line);border-radius:999px;
+    padding:6px 14px;font-size:12.5px;color:var(--ink2);font-weight:600;
+  }
+  .chip b{color:var(--ink);}
+  .chip.warn{border-color:#F6D9A8;background:var(--warn-soft);color:#8A5A05;}
+
+  .tabs{
+    display:flex;flex-wrap:wrap;gap:8px;margin:26px 0 20px;
+    position:sticky;top:0;z-index:20;background:var(--page);padding:10px 0;
+  }
+  .tab{
+    border:1px solid var(--line);background:#fff;color:var(--ink2);
+    padding:8px 15px;border-radius:999px;font-size:13px;font-weight:700;
+    text-decoration:none;transition:.15s;
+  }
+  .tab:hover{border-color:#C9D6FF;color:var(--brand);}
+
+  section{
+    background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+    padding:26px 28px;margin-bottom:20px;box-shadow:0 4px 16px rgba(22,32,44,.04);
+  }
+  h2{
+    margin:0 0 6px;font-size:18.5px;font-weight:800;letter-spacing:-.2px;
+    display:flex;align-items:center;gap:10px;
+  }
+  h2 .num{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:26px;height:26px;border-radius:9px;background:var(--brand-soft);color:var(--brand);
+    font-size:13px;font-weight:800;flex:none;
+  }
+  .sub{color:var(--ink2);font-size:13.5px;margin:0 0 20px;}
+  h3{margin:22px 0 10px;font-size:14.5px;font-weight:800;color:var(--ink);}
+  p{margin:0 0 12px;font-size:14px;color:var(--ink2);}
+  code{
+    font-family:var(--mono);font-size:12.5px;background:#F2F5F9;color:#2B3A4A;
+    padding:2px 6px;border-radius:6px;
+  }
+  b.hl{color:var(--ink);}
+
+  table{width:100%;border-collapse:collapse;font-size:13.2px;margin:8px 0 4px;}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{font-size:12px;letter-spacing:.3px;color:var(--ink3);font-weight:800;background:#FAFCFE;}
+  tr:last-child td{border-bottom:none;}
+  td b{color:var(--ink);}
+  .tag{
+    display:inline-block;font-size:11.5px;font-weight:800;padding:2px 8px;border-radius:999px;
+    background:#F1F4F8;color:var(--ink2);white-space:nowrap;
+  }
+  .tag.new{background:var(--ok-soft);color:#0B7A5B;}
+  .tag.mod{background:var(--brand-soft);color:#2F53C9;}
+  .tag.none{background:#F4F6F8;color:var(--ink3);}
+  .tag.p0{background:var(--danger-soft);color:#B02A2E;}
+  .tag.p1{background:var(--warn-soft);color:#8A5A05;}
+  .tag.p2{background:var(--purple-soft);color:#5340A8;}
+
+  ul.clean{margin:6px 0 10px;padding-left:20px;font-size:13.8px;color:var(--ink2);}
+  ul.clean li{margin:6px 0;}
+  ul.clean li b{color:var(--ink);}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  @media (max-width:900px){.grid2,.grid3{grid-template-columns:1fr;}}
+
+  .note{
+    border:1px solid var(--line);border-left:3px solid var(--brand);
+    background:#F8FAFF;border-radius:12px;padding:13px 16px;font-size:13.3px;color:var(--ink2);margin:14px 0;
+  }
+  .note.warn{border-left-color:var(--warn);background:#FFFAF1;}
+  .note.danger{border-left-color:var(--danger);background:#FFF7F7;}
+  .note.ok{border-left-color:var(--ok);background:#F5FDF9;}
+  .note b{color:var(--ink);}
+
+  .stack{display:flex;flex-direction:column;gap:8px;margin:6px 0 0;}
+  .layer{
+    display:grid;grid-template-columns:150px 1fr;gap:14px;align-items:center;
+    border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:#FCFDFF;
+  }
+  .layer .lt{font-size:12px;font-weight:800;color:var(--ink3);letter-spacing:.4px;}
+  .layer .lb{font-size:13.3px;color:var(--ink2);}
+  .layer .lb b{color:var(--ink);}
+  .layer.hot{background:#F7F9FF;border-color:#CBD9FF;}
+  .arrowdown{text-align:center;color:#C3CEDC;font-size:13px;line-height:1;}
+
+  .mock-wrap{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+  @media (max-width:820px){.mock-wrap{grid-template-columns:1fr;}}
+  .mock-label{font-size:12px;font-weight:800;color:var(--ink3);margin-bottom:8px;letter-spacing:.3px;}
+  .desk{
+    border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#E9EEF5;
+    padding:26px 26px 0;position:relative;min-height:230px;
+  }
+  .desk.dark{background:#1E2430;}
+  .tray-menu{
+    position:absolute;right:34px;top:34px;width:172px;border-radius:9px;overflow:hidden;
+    background:#F7F7F7;border:1px solid #D9D9D9;
+    box-shadow:0 8px 20px rgba(0,0,0,.16);font-size:13px;
+  }
+  .tray-menu.dark{background:#2C2C2C;border-color:#3D3D3D;box-shadow:0 8px 20px rgba(0,0,0,.5);}
+  .mi{padding:8px 14px;color:#1B1B1B;cursor:default;font-weight:500;}
+  .tray-menu.dark .mi{color:#EFEFEF;}
+  .mi.hover{background:#E5EEFF;}
+  .tray-menu.dark .mi.hover{background:#3A3A3A;}
+  .taskbar{
+    position:absolute;left:0;right:0;bottom:0;height:44px;background:#F3F3F3;
+    border-top:1px solid #E1E1E1;display:flex;align-items:center;justify-content:flex-end;
+    gap:10px;padding:0 14px;
+  }
+  .taskbar.dark{background:#202020;border-top-color:#2E2E2E;}
+  .tb-app{
+    width:26px;height:26px;border-radius:7px;background:var(--brand);
+    color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;
+  }
+  .tb-sep{width:1px;height:20px;background:#D8D8D8;}
+  .taskbar.dark .tb-sep{background:#3A3A3A;}
+  .tb-tray{display:flex;align-items:center;gap:7px;}
+  .tb-clock{font-size:11.5px;color:#5C6B7A;line-height:1.25;text-align:right;}
+  .taskbar.dark .tb-clock{color:#C9C9C9;}
+  .tray-ico{
+    width:20px;height:20px;border-radius:5px;background:linear-gradient(160deg,#6D8BFF,#3D5BFF);
+    display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(255,255,255,.35);
+  }
+  .tray-ico span{color:#fff;font-size:11px;font-weight:800;line-height:1;}
+  .pointer{
+    position:absolute;width:14px;height:20px;right:214px;top:52px;z-index:5;
+    background:no-repeat center/contain;
+  }
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;font-size:12.5px;color:var(--ink3);}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px;vertical-align:middle;}
+
+  .spec-list{display:flex;flex-direction:column;gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;}
+  .spec{display:grid;grid-template-columns:120px 1fr;gap:12px;padding:10px 14px;font-size:13.2px;border-bottom:1px solid var(--line);}
+  .spec:last-child{border-bottom:none;}
+  .spec .k{color:var(--ink3);font-weight:800;font-size:12px;letter-spacing:.3px;padding-top:1px;}
+  .spec .v{color:var(--ink2);}
+  .spec .v b{color:var(--ink);}
+
+  .steps{counter-reset:s;margin:8px 0 0;padding:0;list-style:none;}
+  .steps li{
+    counter-increment:s;position:relative;padding:0 0 16px 42px;font-size:13.5px;color:var(--ink2);
+  }
+  .steps li:before{
+    content:counter(s);position:absolute;left:0;top:-1px;width:26px;height:26px;border-radius:9px;
+    background:var(--brand-soft);color:var(--brand);font-weight:800;font-size:12.5px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .steps li:after{
+    content:"";position:absolute;left:13px;top:28px;bottom:2px;width:1px;background:var(--line);
+  }
+  .steps li:last-child:after{display:none;}
+  .steps li b{color:var(--ink);}
+  .steps li .mono{font-family:var(--mono);font-size:12.2px;color:#2B3A4A;background:#F2F5F9;padding:1px 6px;border-radius:6px;}
+
+  .check{display:flex;flex-direction:column;gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;}
+  .ci{display:grid;grid-template-columns:26px 1fr 96px;gap:10px;padding:10px 14px;font-size:13.2px;color:var(--ink2);border-bottom:1px solid var(--line);align-items:start;}
+  .ci:last-child{border-bottom:none;}
+  .ci .bx{width:15px;height:15px;border:1.6px solid #C9D3DE;border-radius:4px;margin-top:2px;}
+  .ci .id{font-family:var(--mono);font-size:11.5px;color:var(--ink3);text-align:right;}
+  .ci b{color:var(--ink);}
+
+  .svgbox{border:1px solid var(--line);border-radius:16px;background:#FCFDFF;padding:6px;overflow:auto;}
+  .cap{font-size:12.3px;color:var(--ink3);text-align:center;padding:8px 6px 4px;}
+
+  .ask{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:#FCFDFF;margin-bottom:12px;}
+  .ask .q{font-size:13.8px;font-weight:800;color:var(--ink);margin-bottom:6px;}
+  .ask .a{font-size:13.2px;color:var(--ink2);}
+  .ask .a b{color:var(--brand);}
+
+  footer{text-align:center;color:var(--ink3);font-size:12.5px;padding-top:10px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <span class="eyebrow"><span class="dot"></span>设计稿 · 已实施 · v1.0.6 发布</span>
+    <h1>Windows 系统托盘常驻方案</h1>
+    <p>
+      目标：Foxel 在 Windows 上以「托盘常驻程序」形态运行 —— 启动即隐藏、关闭只收进托盘、<b class="hl">只有托盘菜单的「退出」才真正结束进程</b>。
+      本稿只做方案，不改动仓库任何代码。
+    </p>
+    <div class="meta-row">
+      <span class="chip">仓库 <b>david88558855/Foxel.App</b></span>
+      <span class="chip">分支基线 <b>v1.0.5+5</b></span>
+      <span class="chip">技术栈 <b>Flutter 3.47.5 / Dart 3.11 · Win32 runner</b></span>
+      <span class="chip warn">Dart 层改动 <b>0 处</b></span>
+      <span class="chip warn">新增 pub 依赖 <b>0 个</b></span>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <a class="tab" href="#req">需求还原</a>
+    <a class="tab" href="#route">方案选型</a>
+    <a class="tab" href="#arch">架构图</a>
+    <a class="tab" href="#state">状态机</a>
+    <a class="tab" href="#ui">托盘菜单界面</a>
+    <a class="tab" href="#files">改动清单</a>
+    <a class="tab" href="#pit">实现要点 / 坑</a>
+    <a class="tab" href="#accept">验收清单</a>
+    <a class="tab" href="#ci">远程编译</a>
+    <a class="tab" href="#ask">待你确认</a>
+  </div>
+
+  <section id="req">
+    <h2><span class="num">1</span>需求还原与验收口径</h2>
+    <p class="sub">把你描述的三句话，翻译成可判定的行为定义 —— 有歧义的地方我按最严格口径落地。</p>
+    <table>
+      <thead><tr><th style="width:22%">你的原话</th><th style="width:38%">行为定义（本方案口径）</th><th>判定方式</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>程序启动后<b>必定</b>以最小化到托盘的模式运行</td>
+          <td>双击 exe → 进程起来、托盘出现图标、<b>主窗口一次都不出现</b>（不是"先闪一下再隐藏"）、任务栏无程序按钮</td>
+          <td>任务管理器有进程 + 任务栏无按钮 + 全程无窗口闪现</td>
+        </tr>
+        <tr>
+          <td>托盘图标右键弹出菜单，<b>仅含</b>「显示主窗口」「退出」</td>
+          <td>右键 → 光标处弹出系统原生菜单，<b>只有 2 条</b>：无分隔线、无图标、无"关于"、无"设置"、无三级子菜单</td>
+          <td>目视计数 = 2</td>
+        </tr>
+        <tr>
+          <td>关闭主界面 → 变成小托盘</td>
+          <td>点窗口右上角 X、按 Alt+F4、任务栏右键"关闭窗口" → 全部只隐藏、进程存活、托盘图标保留、任务栏按钮消失</td>
+          <td>关闭后任务管理器仍有进程，托盘图标仍在</td>
+        </tr>
+        <tr>
+          <td>只有托盘右键「退出」才是真正关闭</td>
+          <td>唯一退出路径 = 托盘菜单「退出」；执行后图标先消失、进程再结束，<b>不留幽灵图标</b></td>
+          <td>退出后托盘区无残留图标，进程列表清空</td>
+        </tr>
+        <tr>
+          <td class="hl">v1.1 追加：左键双击托盘图标 = 显示主窗口</td>
+          <td>双击图标与菜单「显示主窗口」<b>复用同一回调</b>，效果逐项一致（前台激活、原位置尺寸、最大化状态、任务栏按钮）；单击不做任何事</td>
+          <td>两种触发方式结果对比无差异</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note warn">
+      <b>两个必须讲清的取舍：</b><br />
+      ① 启动即隐藏，用户双击 exe 后"看起来什么都没发生"——这是需求的必然结果。缓解方案见第 10 节（首次启动提示），需要你拍板。<br />
+      ② 窗口的「最小化」按钮<b>不</b>接管（仍最小化到任务栏），只有「关闭」才进托盘。若你希望最小化也进托盘，我加 3 行即可，但会改变现有 Windows 使用习惯，默认不做。
+    </div>
+  </section>
+
+  <section id="route">
+    <h2><span class="num">2</span>方案选型：为什么走原生 Win32，而不是 tray_manager</h2>
+    <p class="sub">这是本稿最关键的技术决策，直接影响你在"只能远程编译"约束下的返工次数。</p>
+    <table>
+      <thead><tr><th style="width:16%">维度</th><th style="width:42%">方案 A · 原生 Win32 runner（推荐）</th><th>方案 B · tray_manager + window_manager</th></tr></thead>
+      <tbody>
+        <tr><td><b>实现位置</b></td><td>新增 <code>windows/runner/tray_icon.cpp/.h</code>，改 3 个 runner 文件</td><td>改 <code>lib/main.dart</code>、<code>app_root.dart</code>，加 2 个 pub 依赖、加 1 个 ico 资源</td></tr>
+        <tr><td><b>新增依赖</b></td><td><b>0 个</b>（只用系统 shell32 / user32）</td><td>tray_manager、window_manager（含 screen_retriever 传递依赖）</td></tr>
+        <tr><td><b>依赖解析风险</b></td><td><b>无</b>。不改 pubspec.lock，<code>flutter pub get</code> 变化为零</td><td><b>有</b>。tray_manager 最新 0.8.0 要求 Dart ≥ 3.13，而本项目 <code>sdk: ^3.11.5</code>，很可能解析失败或需回退 0.5.x 老 API</td></tr>
+        <tr><td><b>启动时序</b></td><td>托盘图标在 C++ 层创建，<b>早于 Dart 引擎首帧</b>，启动即常驻</td><td>必须等 Flutter 引擎起来、Dart 执行到 <code>main()</code> 才有图标，中间有窗口空窗期</td></tr>
+        <tr><td><b>关闭拦截</b></td><td>直接吃 <code>WM_CLOSE</code>，语义确定，不受插件版本行为影响</td><td>依赖 <code>setPreventClose</code> + <code>onWindowClose</code> 回调，链路更长</td></tr>
+        <tr><td><b>影响其他平台</b></td><td><b>零影响</b>：只动 <code>windows/</code> 目录，Android/iOS/macOS/Linux 编译产物完全不变</td><td>Dart 代码要写 <code>Platform.isWindows</code> 分支，跨平台构建都要重新验证</td></tr>
+        <tr><td><b>代码量</b></td><td>约 <b>+180 行 C++</b>，Dart <b>0 行</b></td><td>约 +60 行 Dart、+2 依赖、+1 资源</td></tr>
+        <tr><td><b>编译失败风险</b></td><td>中低（纯 Win32 API，但受 <code>/W4 /WX</code> 严格告警约束，需要谨慎写）</td><td>中（pub 解析 + 插件 CMake 兼容 + Dart 版本）</td></tr>
+        <tr><td><b>结论</b></td><td><span class="tag p0">采用</span></td><td><span class="tag none">备选（A 若编译受阻再切）</span></td></tr>
+      </tbody>
+    </table>
+    <div class="note">
+      <b>核心判断：</b>你的痛点不是"功能做不出来"，而是"每验证一次都要 push 一次、等 CI 跑一次"。原生方案把变量压到最少 —— 不引入 pub 版本博弈、不引入跨平台回归、托盘图标直接复用 exe 已内嵌的 <code>IDI_APP_ICON</code>（<code>windows/runner/resources/app_icon.ico</code>，resource id 101），连图标资源文件都不用新增。
+    </div>
+    <div class="note danger">
+      <b>已核对的两个真实坑（方案 A 必须处理，不处理必编译失败/乱码）：</b><br />
+      ① <code>windows/CMakeLists.txt</code> 里 <code>APPLY_STANDARD_SETTINGS</code> 用了 <code>/W4 /WX</code>（告警即错误），但<b>没有 <code>/utf-8</code></b>。源码里写中文 <code>L"显示主窗口"</code> 会触发 C4819 直接编译失败，或在 CI 英文环境下变成乱码菜单 → 必须给 runner 目标补 <code>/utf-8</code>。<br />
+      ② <code>Shell_NotifyIcon</code> 属 shell32，虽然 WIN32 子系统默认链接表通常已含，但在 CMake 里显式补 <code>shell32.lib</code> 才稳。
+    </div>
+  </section>
+
+  <section id="arch">
+    <h2><span class="num">3</span>架构方案图：托盘在哪一层</h2>
+    <p class="sub">红线以下全在 <code>windows/runner/</code> 内完成，Dart 业务代码一行不碰。</p>
+
+    <div class="stack">
+      <div class="layer">
+        <div class="lt">FLUTTER / DART</div>
+        <div class="lb"><b>不改动</b>　<code>lib/app/app_root.dart</code> · <code>lib/features/**</code> · 账户沙箱 / 传输队列 / 播放器　<span class="tag none">0 行变更</span></div>
+      </div>
+      <div class="arrowdown">│</div>
+      <div class="layer">
+        <div class="lt">FLUTTER ENGINE</div>
+        <div class="lb">渲染与业务逻辑照常运行；窗口隐藏期间 Dart 定时器、HTTP 下载、传输队列<b>不受影响</b>　<span class="tag none">0 行变更</span></div>
+      </div>
+      <div class="arrowdown">│</div>
+      <div class="layer hot">
+        <div class="lt">RUNNER（本次改动）</div>
+        <div class="lb"><b>FlutterWindow</b>（窗口生命周期 / WM_CLOSE / 托盘消息分发）　＋　<b>TrayIcon</b>（新增：图标、菜单、TaskbarCreated）</div>
+      </div>
+      <div class="arrowdown">│</div>
+      <div class="layer">
+        <div class="lt">WIN32 / SHELL</div>
+        <div class="lb"><code>Shell_NotifyIcon</code>　<code>CreatePopupMenu</code> / <code>TrackPopupMenuEx</code>　<code>ShowWindow(SW_HIDE)</code>　<code>DestroyWindow</code>　<code>PostQuitMessage</code></div>
+      </div>
+      <div class="arrowdown">│</div>
+      <div class="layer">
+        <div class="lt">WINDOWS SHELL</div>
+        <div class="lb">任务栏通知区域（explorer.exe）→ 图标 / 右键菜单 / 系统主题（浅色·深色自动跟随）</div>
+      </div>
+    </div>
+
+    <h3>消息流：谁通知谁</h3>
+    <table>
+      <thead><tr><th style="width:26%">触发源</th><th style="width:24%">Windows 消息</th><th>处理者与动作</th></tr></thead>
+      <tbody>
+        <tr><td>右键托盘图标</td><td><code>WM_APP+101</code>（lParam = <code>WM_RBUTTONUP</code>）</td><td><b>TrayIcon</b> → 置前景 → <code>TrackPopupMenuEx(TPM_RETURNCMD)</code> → 返回 1001/1002/0</td></tr>
+        <tr><td>左键双击托盘图标</td><td><code>WM_APP+101</code>（lParam = <code>WM_LBUTTONDBLCLK</code>）</td><td><b>TrayIcon::InvokeShow()</b> —— 与菜单项 1001 共用同一出口，不另写显示逻辑；单击（<code>WM_LBUTTONUP</code>）不响应</td></tr>
+        <tr><td>菜单「显示主窗口」</td><td>→ 回调 <code>on_show</code></td><td><b>FlutterWindow::ShowMainWindow()</b>：<code>ShowWindow(SW_SHOW/SW_RESTORE)</code> + <code>SetForegroundWindow</code> + <code>ForceRedraw</code></td></tr>
+        <tr><td>菜单「退出」</td><td>→ 回调 <code>on_exit</code></td><td><b>FlutterWindow::QuitApp()</b>：置 <code>quitting_=true</code> → 删图标 → <code>DestroyWindow</code> → <code>WM_DESTROY</code> → <code>PostQuitMessage</code></td></tr>
+        <tr><td>点窗口 X / Alt+F4</td><td><code>WM_CLOSE</code></td><td><b>FlutterWindow</b> 拦截：<code>quitting_==false</code> 时 <code>ShowWindow(SW_HIDE)</code> 并 <code>return 0</code>（窗口不销毁，状态全保留）</td></tr>
+        <tr><td>explorer.exe 崩溃重启</td><td><code>TaskbarCreated</code>（<code>RegisterWindowMessage</code>）</td><td><b>TrayIcon</b> 自动 <code>NIM_ADD</code> 重挂图标（不加这段，重启资源管理器后图标永久消失）</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="state">
+    <h2><span class="num">4</span>窗口状态机：只有一条路能到「退出」</h2>
+    <p class="sub">核心是让 <b>主窗口可见</b> 与 <b>进程退出</b> 之间<b>不存在任何直接通路</b>。</p>
+
+    <div class="svgbox">
+      <svg viewBox="0 0 1120 420" width="100%" role="img" xmlns="http://www.w3.org/2000/svg" font-family="'PingFang SC','Microsoft YaHei',system-ui,sans-serif">
+        <title>Foxel Windows 托盘状态机</title>
+        <desc>启动后进入托盘常驻隐藏态；菜单显示主窗口进入可见态；点关闭回到隐藏态；只有托盘菜单退出才结束进程。</desc>
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+
+        <rect x="60" y="30" width="240" height="62" rx="12" fill="#F1EFE8" stroke="#888780" stroke-width="1"/>
+        <text x="180" y="54" text-anchor="middle" font-size="14.5" font-weight="600" fill="#2C2C2A">启动 Foxel.exe</text>
+        <text x="180" y="74" text-anchor="middle" font-size="12" fill="#5F5E5A">wWinMain → Create 窗口</text>
+
+        <path d="M180 92 L180 148" fill="none" stroke="#185FA5" stroke-width="1.6" marker-end="url(#ah)"/>
+        <text x="192" y="116" font-size="12" fill="#185FA5">首帧回调不再 Show()</text>
+        <text x="192" y="133" font-size="12" fill="#888780">→ 窗口全程不可见</text>
+
+        <rect x="40" y="150" width="280" height="86" rx="14" fill="#E6F1FB" stroke="#185FA5" stroke-width="1.4"/>
+        <text x="180" y="178" text-anchor="middle" font-size="15" font-weight="600" fill="#0C447C">常驻态 · 窗口隐藏</text>
+        <text x="180" y="200" text-anchor="middle" font-size="12.5" fill="#185FA5">托盘图标可见 · 任务栏无按钮</text>
+        <text x="180" y="219" text-anchor="middle" font-size="12" fill="#888780">进程存活 · 传输继续 · 状态全保留</text>
+
+        <path d="M320 176 L660 176" fill="none" stroke="#185FA5" stroke-width="1.6" marker-end="url(#ah)"/>
+        <text x="490" y="166" text-anchor="middle" font-size="12" fill="#185FA5">右键菜单 / 左键双击</text>
+
+        <path d="M660 208 L320 208" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#ah)"/>
+        <text x="490" y="228" text-anchor="middle" font-size="12" fill="#5F5E5A">点 X / Alt+F4 → 拦截 WM_CLOSE</text>
+
+        <rect x="660" y="150" width="280" height="86" rx="14" fill="#EAF3DE" stroke="#639922" stroke-width="1.4"/>
+        <text x="800" y="178" text-anchor="middle" font-size="15" font-weight="600" fill="#173404">主窗口可见</text>
+        <text x="800" y="200" text-anchor="middle" font-size="12.5" fill="#3B6D11">托盘图标仍在 · 任务栏有按钮</text>
+        <text x="800" y="219" text-anchor="middle" font-size="12" fill="#888780">最小化 → 仍回任务栏（不接管）</text>
+
+        <path d="M180 236 L180 300" fill="none" stroke="#A32D2D" stroke-width="1.6" marker-end="url(#ah)"/>
+        <text x="192" y="262" font-size="12" fill="#A32D2D">右键 → 退出</text>
+        <text x="192" y="279" font-size="12" fill="#888780">全流程唯一出口</text>
+
+        <rect x="40" y="302" width="280" height="76" rx="14" fill="#FCEBEB" stroke="#A32D2D" stroke-width="1.4"/>
+        <text x="180" y="330" text-anchor="middle" font-size="15" font-weight="600" fill="#501313">进程退出</text>
+        <text x="180" y="352" text-anchor="middle" font-size="12" fill="#A32D2D">NIM_DELETE → DestroyWindow → 退出</text>
+
+        <path d="M800 236 L800 340 L320 340" fill="none" stroke="#C0C6CE" stroke-width="1.4" stroke-dasharray="5 5"/>
+        <text x="676" y="332" text-anchor="middle" font-size="12" fill="#9AA3AD">✕ 无退出通路</text>
+        <text x="676" y="358" text-anchor="middle" font-size="11.5" fill="#B4BAC2">主窗口可见时只能回到隐藏态</text>
+      </svg>
+      <div class="cap">图 4-1　窗口状态机（隐藏态是唯一的"归宿态"，退出只能从隐藏态由托盘菜单触发）</div>
+    </div>
+
+    <div class="note ok">
+      <b>为什么关闭时"隐藏"而不是"销毁窗口"：</b>销毁后再重建会丢窗口位置/尺寸/最大化状态，且 Flutter 引擎需要重建渲染表面（有白屏风险）。<code>SW_HIDE</code> 仅隐藏，恢复时是"原样弹出"，也符合"缩小到托盘"的直觉。
+    </div>
+  </section>
+
+  <section id="ui">
+    <h2><span class="num">5</span>托盘菜单界面设计</h2>
+    <p class="sub">系统原生菜单（不是自绘），所以视觉完全跟随 Windows 主题；这里给的是浅色 / 深色两种系统下的实际观感。</p>
+
+    <div class="mock-wrap">
+      <div>
+        <div class="mock-label">系统主题：浅色</div>
+        <div class="desk" style="background:#EDF1F7;">
+          <div class="tray-menu">
+            <div class="mi hover">显示主窗口</div>
+            <div class="mi">退出</div>
+          </div>
+          <div class="taskbar">
+            <div class="tb-app">F</div>
+            <div class="tb-sep"></div>
+            <div class="tb-tray">
+              <div class="tray-ico"><span>F</span></div>
+              <div class="tb-clock">15:13<br/>2026/10/17</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="mock-label">系统主题：深色</div>
+        <div class="desk dark">
+          <div class="tray-menu dark">
+            <div class="mi hover">显示主窗口</div>
+            <div class="mi">退出</div>
+          </div>
+          <div class="taskbar dark">
+            <div class="tb-app">F</div>
+            <div class="tb-sep"></div>
+            <div class="tb-tray">
+              <div class="tray-ico"><span>F</span></div>
+              <div class="tb-clock">15:13<br/>2026/10/17</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>菜单规格</h3>
+    <div class="spec-list">
+      <div class="spec"><div class="k">条目数量</div><div class="v"><b>严格 2 条</b>，不含分隔线、不含图标、不含子菜单、不含默认项加粗</div></div>
+      <div class="spec"><div class="k">文案</div><div class="v">第 1 条 <b>显示主窗口</b>　第 2 条 <b>退出</b>（与需求原文逐字一致，不做"退出 Foxel"之类的扩写）</div></div>
+      <div class="spec"><div class="k">弹出位置</div><div class="v">光标当前位置（<code>GetCursorPos</code>），任务栏在上下左右任意边都正确</div></div>
+      <div class="spec"><div class="k">触发方式</div><div class="v"><b>右键</b>弹出菜单；<b>左键双击图标</b> = 菜单「显示主窗口」（共用同一回调）；左键单击无动作（避免误触）</div></div>
+      <div class="spec"><div class="k">关闭方式</div><div class="v">点菜单外任意处 / Esc → 菜单消失且不执行任何动作（<code>TrackPopupMenuEx</code> 返回 0）</div></div>
+      <div class="spec"><div class="k">字体与圆角</div><div class="v">系统原生（<code>TrackPopupMenuEx</code> 绘制），不自定义 —— 保证在高 DPI、系统主题、无障碍设置下都正确</div></div>
+      <div class="spec"><div class="k">托盘图标</div><div class="v">复用 exe 内嵌 <code>IDI_APP_ICON</code>；按 <code>SM_CXSMICON</code> 尺寸加载，保证 100%～500% 缩放清晰</div></div>
+      <div class="spec"><div class="k">鼠标悬停提示</div><div class="v"><b>Foxel</b>（简短，不堆版本号）</div></div>
+    </div>
+
+    <div class="note ok">
+      <b>关于"左键双击显示窗口"（v1.1 新增）：</b>符合 Windows 托盘惯例，且与右键菜单「显示主窗口」<b>完全同源</b>——两条路径都只调用 <code>TrayIcon::InvokeShow()</code> → <code>FlutterWindow::ShowMainWindow()</code>，没有第二份显示逻辑，因此不可能出现行为差异。单击仍然不响应，避免误触把窗口叫出来。
+    </div>
+  </section>
+
+  <section id="seq">
+    <h2><span class="num">6</span>三条关键路径的调用顺序</h2>
+    <p class="sub">顺序错了就会出现"幽灵图标"和"关不掉"这两个典型的托盘 bug。</p>
+
+    <h3>路径 A · 启动（必定隐藏）</h3>
+    <ol class="steps">
+      <li><b>wWinMain</b> → <code class="mono">FlutterWindow::Create(...)</code> → 原生窗口创建（<code>WS_OVERLAPPEDWINDOW</code>，此时本来就不可见）</li>
+      <li><b>OnCreate</b> → 创建 FlutterViewController → <code class="mono">SetChildContent(view)</code> 挂载渲染视图</li>
+      <li><b>【改动】</b>删除模板里的 <code class="mono">SetNextFrameCallback([&]{ this->Show(); })</code> —— 这一行就是"启动会弹出窗口"的唯一原因</li>
+      <li><b>【新增】</b><code class="mono">tray_.Create(hwnd, WM_APP+101, icon, L"Foxel")</code> → <code class="mono">Shell_NotifyIcon(NIM_ADD)</code> → 托盘图标出现</li>
+      <li><b>【新增】</b>绑定 <code class="mono">on_show</code> / <code class="mono">on_exit</code> 回调；注册 <code class="mono">TaskbarCreated</code> 消息</li>
+      <li>进入消息循环 <code class="mono">GetMessage</code>：窗口隐藏但消息照常处理，Dart 业务正常运行</li>
+    </ol>
+
+    <h3>路径 B · 关闭主窗口（只隐藏）</h3>
+    <ol class="steps">
+      <li>用户点 X / Alt+F4 / 任务栏右键关闭 → 系统发出 <code class="mono">WM_CLOSE</code></li>
+      <li><b>FlutterWindow::MessageHandler</b> 在交给 <code class="mono">DefWindowProc</code> 之前拦截：<code class="mono">if (!quitting_) { ShowWindow(hwnd, SW_HIDE); return 0; }</code></li>
+      <li>窗口隐藏 → 任务栏按钮消失、Alt+Tab 不再列出、进程与引擎继续存活</li>
+      <li>（没有这一步，<code>DefWindowProc</code> 会销毁窗口 → <code>WM_DESTROY</code> → <code>PostQuitMessage</code> → 进程直接死掉）</li>
+    </ol>
+
+    <h3>路径 C · 托盘菜单「退出」（唯一真退出）</h3>
+    <ol class="steps">
+      <li>右键图标 → <code class="mono">WM_APP+101</code>（lParam=<code>WM_RBUTTONUP</code>）→ <code class="mono">SetForegroundWindow(hwnd)</code>（不置前景，菜单点外面不会消失——经典坑）</li>
+      <li><code class="mono">CreatePopupMenu</code> → <code>AppendMenuW(1001,"显示主窗口")</code> → <code>AppendMenuW(1002,"退出")</code> → <code class="mono">TrackPopupMenuEx(TPM_RETURNCMD|TPM_RIGHTBUTTON)</code></li>
+      <li>用户点「退出」→ 返回 1002 → <code class="mono">PostMessage(hwnd, WM_NULL, 0, 0)</code> 清理菜单残留 → 回调 <code class="mono">on_exit</code></li>
+      <li><b>【顺序关键】</b>先 <code class="mono">Shell_NotifyIcon(NIM_DELETE)</code> 删图标，<b>再</b> <code class="mono">DestroyWindow</code></li>
+      <li><code class="mono">WM_DESTROY</code> → <code class="mono">PostQuitMessage(0)</code> → 消息循环退出 → <code class="mono">CoUninitialize</code> → 进程结束</li>
+      <li>（顺序反了：窗口先没了，托盘回调的 HWND 失效，图标残留成"幽灵图标"，鼠标划过才消失）</li>
+    </ol>
+    <div class="note danger">
+      <b>退出时不做"等待传输完成"的阻塞：</b>直接结束进程。项目的传输队列本身有持久化，下次启动可续传；如果退出要弹确认框"有 2 个任务进行中"，那属于另一个需求，不在本稿范围。
+    </div>
+  </section>
+
+  <section id="files">
+    <h2><span class="num">7</span>文件改动清单</h2>
+    <p class="sub">全部集中在 <code>windows/runner/</code>；<code>lib/</code>、<code>pubspec.yaml</code>、其他平台目录零变更。</p>
+    <table>
+      <thead><tr><th style="width:32%">文件</th><th style="width:10%">类型</th><th style="width:8%">规模</th><th>改动内容</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>windows/runner/tray_icon.h</code></td>
+          <td><span class="tag new">新增</span></td>
+          <td>~45 行</td>
+          <td><code>TrayIcon</code> 类声明：<code>Create / Dispose / HandleWindowMessage / ShowContextMenu / ReAddIcon</code>，<code>on_show / on_exit</code> 两个 <code>std::function</code> 回调，<code>NOTIFYICONDATAW</code> 状态成员</td>
+        </tr>
+        <tr>
+          <td><code>windows/runner/tray_icon.cpp</code></td>
+          <td><span class="tag new">新增</span></td>
+          <td>~135 行</td>
+          <td><code>NIM_ADD/NIM_DELETE</code>、<code>LoadImage(SM_CXSMICON)</code>、右键 <code>CreatePopupMenu + TrackPopupMenuEx</code>（仅 2 项）、<code>TaskbarCreated</code> 重挂、<code>WM_NULL</code> 收尾</td>
+        </tr>
+        <tr>
+          <td><code>windows/runner/flutter_window.h</code></td>
+          <td><span class="tag mod">修改</span></td>
+          <td>+8 行</td>
+          <td>include <code>tray_icon.h</code>；新增 <code>TrayIcon tray_</code>、<code>bool quitting_</code>、<code>ShowMainWindow() / HideMainWindow() / QuitApp()</code> 声明</td>
+        </tr>
+        <tr>
+          <td><code>windows/runner/flutter_window.cpp</code></td>
+          <td><span class="tag mod">修改</span></td>
+          <td>+38 / −1 行</td>
+          <td>① 删除首帧 <code>Show()</code>；② OnCreate 末尾初始化托盘并绑定回调；③ <code>WM_CLOSE</code> 拦截为隐藏；④ <code>WM_APP+101</code> / <code>TaskbarCreated</code> 分发；⑤ 三个窗口操作方法实现</td>
+        </tr>
+        <tr>
+          <td><code>windows/runner/CMakeLists.txt</code></td>
+          <td><span class="tag mod">修改</span></td>
+          <td>+4 行</td>
+          <td><code>tray_icon.cpp</code> 加入 <code>add_executable</code>；runner 目标补 <code>/utf-8</code>；链接 <code>shell32.lib</code></td>
+        </tr>
+        <tr>
+          <td><code>windows/runner/app_messages.h</code></td>
+          <td><span class="tag new">新增</span></td>
+          <td>15 行</td>
+          <td>窗口标题与两条自定义消息常量（<code>WM_APP+101</code> 托盘回调、<code>WM_APP+102</code> 第二实例唤起），避免散落硬编码</td>
+        </tr>
+        <tr>
+          <td><code>.github/workflows/windows-tray-preview.yml</code></td>
+          <td><span class="tag new">临时</span></td>
+          <td>50 行</td>
+          <td>只编译 Windows 的校验通道，避免在主 <code>build.yml</code> 上手动运行误发 Release；<b>合并前可删</b></td>
+        </tr>
+        <tr>
+          <td><code>lib/**</code>（Dart 全部业务）</td>
+          <td><span class="tag none">不动</span></td>
+          <td>0 行</td>
+          <td>账户 / 沙箱 / 传输 / 播放 / 设置全部不受影响</td>
+        </tr>
+        <tr>
+          <td><code>pubspec.yaml</code> / <code>pubspec.lock</code></td>
+          <td><span class="tag none">不动</span></td>
+          <td>0 行</td>
+          <td>零新增依赖，<code>flutter pub get</code> 结果与现在完全一致</td>
+        </tr>
+        <tr>
+          <td><code>windows/runner/resources/*</code></td>
+          <td><span class="tag none">不动</span></td>
+          <td>0 行</td>
+          <td>托盘图标复用已有 <code>app_icon.ico</code>（<code>IDI_APP_ICON</code> = 101）</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="margin-top:14px;font-size:13px;color:var(--ink3);">
+      合计：<b class="hl">新增 3 个原生文件（约 287 行）、修改 4 个文件（约 60 行）</b>，全部在 Windows 平台目录内，可整体回滚；<code>lib/</code> 与 <code>pubspec</code> 零改动。
+    </p>
+  </section>
+
+  <section id="pit">
+    <h2><span class="num">8</span>实现要点与已知坑</h2>
+    <p class="sub">这些是"远程编译、一次过"的关键，逐条都已在方案里体现。</p>
+    <table>
+      <thead><tr><th style="width:6%">#</th><th style="width:26%">坑</th><th style="width:34%">症状</th><th>对策</th></tr></thead>
+      <tbody>
+        <tr><td class="tag p0">01</td><td><code>/W4 /WX</code> 无 <code>/utf-8</code></td><td>CI 编译直接失败（C4819），或菜单显示乱码</td><td>runner 目标追加 <code>/utf-8</code>；源文件保存为 UTF-8</td></tr>
+        <tr><td class="tag p0">02</td><td>未拦截 <code>WM_CLOSE</code></td><td>点 X 直接退出，托盘图标消失，需求失效</td><td>在 <code>FlutterWindow::MessageHandler</code> 里 <code>SW_HIDE + return 0</code></td></tr>
+        <tr><td class="tag p0">03</td><td>退出顺序错误</td><td>退出后托盘残留"幽灵图标"</td><td>必须先 <code>NIM_DELETE</code> 再 <code>DestroyWindow</code></td></tr>
+        <tr><td class="tag p0">04</td><td>首帧 <code>Show()</code> 未删</td><td>启动时窗口闪一下再隐藏，破坏"必定最小化"</td><td>删除 <code>SetNextFrameCallback</code> 里的 <code>Show()</code></td></tr>
+        <tr><td class="tag p1">05</td><td>菜单弹出前未 <code>SetForegroundWindow</code></td><td>点菜单外部菜单不消失，卡在屏幕上</td><td>弹出前置前景，弹出后 <code>PostMessage(WM_NULL)</code></td></tr>
+        <tr><td class="tag p1">06</td><td>未处理 <code>TaskbarCreated</code></td><td>explorer 重启（或崩溃恢复）后图标永久消失</td><td><code>RegisterWindowMessage(L"TaskbarCreated")</code> + <code>NIM_ADD</code> 重挂</td></tr>
+        <tr><td class="tag p1">07</td><td>图标按 32×32 硬编码</td><td>150%/200% 缩放下达托盘图标模糊</td><td><code>LoadImage</code> 按 <code>SM_CXSMICON</code> 取尺寸</td></tr>
+        <tr><td class="tag p1">08</td><td>隐藏后仍占任务栏/Alt+Tab</td><td>"最小化到托盘"变成"最小化到任务栏"</td><td><code>SW_HIDE</code> 而非 <code>SW_MINIMIZE</code></td></tr>
+        <tr><td class="tag p1">09</td><td>重复启动产生两个托盘图标</td><td>便携版两个实例同时写 <code>userdata/prefs.json</code>，后写覆盖前写</td><td>建议加单实例（命名互斥体 + 唤起已存在窗口，约 15 行）；见第 10 节待确认项 ③</td></tr>
+        <tr><td class="tag p2">10</td><td>首次显示瞬间白/黑闪</td><td>窗口隐藏期引擎未上屏，首次 <code>Show</code> 可能有一帧空白</td><td>显示时补 <code>ForceRedraw + InvalidateRect</code>；若仍明显，用"屏幕外预热一帧再隐藏"兜底</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="accept">
+    <h2><span class="num">9</span>验收清单（拿到 CI 产物后照此点验）</h2>
+    <p class="sub">A 类为需求硬指标，必须全绿；B 类为工程质量项。</p>
+    <div class="check">
+      <div class="ci"><div class="bx"></div><div><b>A1</b>　双击 <code>Foxel.exe</code>：进程出现，托盘出现 Foxel 图标，<b>任务栏无程序按钮</b>，全程无窗口闪现</div><div class="id">启动</div></div>
+      <div class="ci"><div class="bx"></div><div><b>A2</b>　右键托盘图标：在光标处弹出菜单，<b>恰好 2 项</b>（显示主窗口 / 退出）</div><div class="id">菜单</div></div>
+      <div class="ci"><div class="bx"></div><div><b>A3</b>　点「显示主窗口」：窗口前置弹出，任务栏出现按钮，账户/文件列表数据完好</div><div class="id">恢复</div></div>
+      <div class="ci"><div class="bx"></div><div><b>A4</b>　点窗口 X：窗口消失、任务栏按钮消失、进程仍在、托盘图标仍在</div><div class="id">关闭</div></div>
+      <div class="ci"><div class="bx"></div><div><b>A5</b>　<code>Alt+F4</code> 与任务栏右键"关闭窗口"：行为同 A4</div><div class="id">关闭</div></div>
+      <div class="ci"><div class="bx"></div><div><b>A6</b>　再点「显示主窗口」：窗口按原位置/原尺寸恢复（最大化状态也保留）</div><div class="id">恢复</div></div>
+      <div class="ci"><div class="bx"></div><div><b>A7</b>　托盘「退出」：图标<b>先</b>消失，进程随后结束，通知区域无残留图标</div><div class="id">退出</div></div>
+      <div class="ci"><div class="bx"></div><div><b>A8</b>　菜单点外部 / 按 Esc：菜单消失，不触发任何动作</div><div class="id">菜单</div></div>
+      <div class="ci"><div class="bx"></div><div><b>A9</b>　<b>左键双击</b>托盘图标：窗口前台弹出，效果与 A3 逐项一致（位置、尺寸、最大化状态、任务栏按钮、数据）</div><div class="id">双击</div></div>
+      <div class="ci"><div class="bx"></div><div><b>A10</b>　左键<b>单击</b>托盘图标：无任何动作（窗口不弹出、不弹菜单）</div><div class="id">双击</div></div>
+      <div class="ci"><div class="bx"></div><div><b>A11</b>　窗口已可见时再双击图标：窗口前置激活，不产生第二个窗口、不重复加载</div><div class="id">双击</div></div>
+      <div class="ci"><div class="bx"></div><div><b>B1</b>　隐藏状态下发起文件下载/上传，最小化期间任务继续推进（任务页进度可见）</div><div class="id">后台</div></div>
+      <div class="ci"><div class="bx"></div><div><b>B2</b>　任务管理器结束 explorer.exe 再重启：托盘图标自动恢复</div><div class="id">鲁棒性</div></div>
+      <div class="ci"><div class="bx"></div><div><b>B3</b>　显示缩放 100% / 200% / 多显示器：图标清晰、菜单位置正确</div><div class="id">DPI</div></div>
+      <div class="ci"><div class="bx"></div><div><b>B4</b>　<code>flutter analyze</code> 与 <code>flutter test</code> 全绿（Dart 零改动，理论上无风险）</div><div class="id">CI</div></div>
+      <div class="ci"><div class="bx"></div><div><b>B5</b>　Android / iOS / macOS / Linux 构建产物无变化（只改了 <code>windows/</code>）</div><div class="id">回归</div></div>
+    </div>
+  </section>
+
+  <section id="ci">
+    <h2><span class="num">10</span>远程编译验证流程（你的唯一编译通道）</h2>
+    <p class="sub">按现有 <code>.github/workflows/build.yml</code> 的实际行为设计，注意最后一条避坑。</p>
+    <ol class="steps">
+      <li>我提交改动到功能分支（例如 <code>feat/windows-tray</code>），<b>不动 main</b></li>
+      <li>触发 <code>Build All Platforms</code>：优先用 <b>Actions → Run workflow（workflow_dispatch）</b> 手动跑，或 push 到该分支</li>
+      <li>重点看 <code>Windows App</code> job 的 <b>Build Windows</b> 步骤（CMake 编译 runner 在这一步炸或不炸）</li>
+      <li>产物：Artifacts → <code>foxel-windows-zip</code> → 解压运行 <code>Foxel.exe</code>，按第 9 节清单点验</li>
+      <li>若编译报错：把 CI 日志里第一处 <code>error C....</code> 贴给我，我精确修一处再推，不做盲改</li>
+    </ol>
+    <div class="note warn">
+      <b>避坑：</b><code>build.yml</code> 末尾那个发布 job 会 <code>gh-release</code> 并依赖 <code>github.ref_name</code> 生成下载链接。直接在 <b>main 分支</b> push 可能误产生一个以分支名命名的 Release。所以验证阶段走独立分支 + <code>workflow_dispatch</code>，确认通过后再合并、再打 tag 正式发版。
+    </div>
+  </section>
+
+  <section id="ask">
+    <h2><span class="num">11</span>需要你拍板的 4 件事</h2>
+    <p class="sub">确认后我按最终口径一次性改完，再走远程编译。</p>
+
+    <div class="ask">
+      <div class="q">① 实现路线：确认走原生 Win32（方案 A）吗？</div>
+      <div class="a">推荐 <b>A</b>：零依赖、零 Dart 改动、只影响 Windows。若你更希望"纯 Dart 可维护"，我改走 tray_manager+window_manager，但要接受可能的 Dart SDK 版本博弈与 4 个平台重新验证。</div>
+    </div>
+    <div class="ask">
+      <div class="q">② 最小化按钮要不要也进托盘？</div>
+      <div class="a">默认<b>不接管</b>（最小化仍留任务栏，只有关闭进托盘）。若希望"最小化=进托盘"，我再加 <code>WM_SYSCOMMAND/SC_MINIMIZE</code> 拦截（+6 行）。</div>
+    </div>
+    <div class="ask">
+      <div class="q">③ 要不要顺带加「单实例」保护？</div>
+      <div class="a">建议<b>加</b>（+15 行，仍是零依赖）。理由：启动即隐藏后，用户重复双击 exe 看不到任何反馈，容易点出 3 个实例 + 3 个托盘图标，而便携版的 <code>userdata/prefs.json</code> 会被多个进程互相覆盖。加单实例后：第二次启动直接把已有窗口唤到前台。</div>
+    </div>
+    <div class="ask">
+      <div class="q">④ 首次启动要不要给一次"我在托盘"的提示？</div>
+      <div class="a">推荐<b>加</b>：仅第一次启动（写个布尔标记到 prefs）显示一条系统托盘气泡「Foxel 已在后台运行，右键托盘图标可显示主窗口」。否则用户容易以为程序没启动。需要额外少量原生代码（<code>NIF_INFO</code> 气泡，约 10 行，仍无依赖）。</div>
+    </div>
+    <div class="note">
+      以上 4 项你可以只回「①A ②不接管 ③加 ④加」这样一行，我据此进入实现。若全部按推荐，就是：<b>原生 A + 单实例 + 首启气泡 + 不接管最小化</b>，总改动约 <b>215 行 C++，Dart 0 行</b>。
+    </div>
+  </section>
+
+  <footer>Foxel.App · Windows 托盘功能设计稿 · 仅方案，仓库代码未做任何改动</footer>
+</div>
+</body>
+</html>
