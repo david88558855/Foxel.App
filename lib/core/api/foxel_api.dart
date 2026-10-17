@@ -190,10 +190,18 @@ class FoxelApi {
         onProgress?.call(received, total);
       }
     } catch (_) {
-      await sink.close().catchError((_) {});
+      try {
+        await sink.close();
+      } catch (_) {
+        // 关闭失败无所谓，下面会清理掉残缺文件。
+      }
       // 失败时清掉残缺文件，避免用户误以为下载成功。
-      if (await outputFile.exists()) {
-        await outputFile.delete().catchError((_) {});
+      try {
+        if (await outputFile.exists()) {
+          await outputFile.delete();
+        }
+      } catch (_) {
+        // 清理失败不影响抛出原始错误。
       }
       rethrow;
     }
