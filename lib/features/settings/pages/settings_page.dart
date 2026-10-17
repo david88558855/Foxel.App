@@ -138,7 +138,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 const _SettingsRow(
                   icon: Icons.info_outline_rounded,
                   title: '关于 Foxel',
-                  subtitle: '版本 1.0.0',
+                  subtitle: '版本 $appVersion',
                 ),
               ],
             ),
