@@ -1,0 +1,50 @@
+name: Windows Tray Preview
+
+# 仅用于 Windows 托盘功能的远程编译验证：
+# 只构建 Windows，不发布 Release（主 build.yml 末尾的发布 job 会拿
+# github.ref_name 发版，在分支上手动运行会产出以分支名命名的 Release）。
+# 该工作流是临时校验通道，功能合并后可删除。
+on:
+  push:
+    branches: [ feat/windows-tray ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Windows App
+    runs-on: windows-latest
+    steps:
+      # 与 build.yml 保持一致：Git for Windows 会对某些路径做 NTFS 校验，
+      # 关闭该保护可让 checkout 正常处理。
+      - name: Disable NTFS path protection
+        shell: bash
+        run: git config --global core.protectNTFS false
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: Package ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath Foxel-windows-tray-preview.zip
+          Get-Item Foxel-windows-tray-preview.zip | Select-Object Name, Length
+
+      - name: Upload Windows ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: foxel-windows-tray-preview
+          path: Foxel-windows-tray-preview.zip
+          if-no-files-found: error
