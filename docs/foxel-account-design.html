@@ -290,9 +290,10 @@
     <button class="tab" data-p="p5">⑤ 设置页与下载目录</button>
     <button class="tab" data-p="p6">⑥ 主界面与底部导航</button>
     <button class="tab" data-p="p10">⑦ 文件批量操作</button>
-    <button class="tab" data-p="p7">⑧ 隔离与存储</button>
-    <button class="tab" data-p="p8">⑨ 异常与确认</button>
-    <button class="tab" data-p="p9">⑩ 范围与规划</button>
+    <button class="tab" data-p="p11">⑧ 批量重命名</button>
+    <button class="tab" data-p="p7">⑨ 隔离与存储</button>
+    <button class="tab" data-p="p8">⑩ 异常与确认</button>
+    <button class="tab" data-p="p9">⑪ 范围与规划</button>
   </div>
 
   <!-- ===================== ① 概览 ===================== -->
@@ -364,9 +365,10 @@
           <li>⑦ 文件批量操作（多选下载 / 移动 / 复制 / 删除）</li>
         </ul>
         <ul>
-          <li>⑧ 隔离与存储（含 Windows 便携版）</li>
-          <li>⑨ 异常与确认态</li>
-          <li>⑩ 范围与规划</li>
+          <li>⑧ 批量重命名（查找替换 / 前后缀 / 序号 / 大小写 / 扩展名）</li>
+          <li>⑨ 隔离与存储（含 Windows 便携版）</li>
+          <li>⑩ 异常与确认态</li>
+          <li>⑪ 范围与规划</li>
         </ul>
       </div>
     </div>
@@ -941,7 +943,7 @@
               </div>
               <div class="row" style="opacity:.5;">
                 <svg class="ico" viewBox="0 0 24 24" style="stroke:#93A0AF"><path d="M4 7h16v13H4z"/><path d="M9 7V4h6v3"/></svg>
-                <div class="grow"><div class="n-1">批量重命名</div><div class="n-2">后续支持</div></div>
+                <div class="grow"><div class="n-1">批量重命名</div><div class="n-2">见第 ⑧ 页方案</div></div>
               </div>
               <div class="row">
                 <svg class="ico" viewBox="0 0 24 24" style="stroke:#E5484D"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>
@@ -1032,7 +1034,7 @@
           <li><span class="tag">选择模式</span>AppBar 变「<b>取消 / 已选择 N 项 / 全选</b>」；条目左侧出现圆形勾选框，选中项浅蓝底；此时<b>点条目 = 勾选</b>（不再打开），条目右侧的「⋯」按钮隐藏。</li>
           <li><span class="tag">计数</span>顶部信息条给出「含 X 个文件（合计体积）+ Y 个文件夹（共 Z 项）」，避免误选整个大目录。</li>
           <li><span class="tag">操作栏</span>底部悬浮胶囊四项主操作：<b>下载 / 移动 / 复制 / 删除</b>（删除为危险色），第五项「更多」展开完整菜单。</li>
-          <li><span class="tag w">更多菜单</span>下载、移动到…、复制到…、<b>批量重命名（后续支持，置灰）</b>、删除、取消选择。</li>
+          <li><span class="tag w">更多菜单</span>下载、移动到…、复制到…、<b>批量重命名（方案见第 ⑧ 页）</b>、删除、取消选择。</li>
           <li><span class="tag d">删除确认</span>列明数量与构成（含几个文件夹、多少内容、合计体积），声明不可撤销；按钮写明确数量。</li>
           <li><span class="tag">目标目录</span>移动 / 复制进入目录选择页：面包屑 + 当前目录「移动到此文件夹」+ 子目录逐级进入；<b>来源目录自身不可选为目标</b>，其下级也不可选（防循环）。</li>
           <li><span class="tag">命名冲突</span>同名项自动追加「(1)」后缀，不覆盖已有文件，结果以 Toast 汇总。</li>
@@ -1044,7 +1046,228 @@
     </div>
   </div>
 
-  <!-- ===================== ⑧ 隔离与存储 ===================== -->
+  <!-- ===================== ⑧ 批量重命名（panel id 维持 p11） ===================== -->
+  <div class="panel" id="p11">
+    <div class="note">
+      新增设计（<b>仅设计方案，代码暂不动</b>）：入口在批量操作的「更多」菜单里（第 ⑦ 页已置灰占位，现补齐方案）。
+      核心是「<b>先配置规则 → 实时预览新旧名 → 确认后逐项执行</b>」，冲突在预览阶段就拦下来，不产生半成品。
+    </div>
+
+    <div class="stage">
+      <!-- 1 规则选择 -->
+      <div class="phone small">
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="batt"><i></i></span></span></div>
+          <div class="appbar" style="padding-bottom:6px;">
+            <div class="iconbtn"><svg class="ico" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></div>
+            <div style="flex:1;text-align:center;font-size:16px;font-weight:800;">批量重命名</div><div style="width:36px;"></div>
+          </div>
+          <div class="content scroll" style="padding-top:8px;">
+            <div class="mcard" style="background:#F7FAFF;border-style:dashed;padding:10px 14px;">
+              <div style="font-size:11.5px;color:var(--ink2);font-weight:700;">已选 5 项 · 4 个文件 + 1 个文件夹</div>
+            </div>
+            <div class="sec-label">重命名方式</div>
+            <div class="rows">
+              <div class="row" style="background:#F7FAFF;">
+                <svg class="ico" viewBox="0 0 24 24" style="stroke:#4C6FFF"><path d="M4 7h10M4 12h7M4 17h13"/><path d="M17 5l3 3-3 3"/></svg>
+                <div class="grow"><div class="n-1">查找替换</div><div class="n-2">替换文件名中的指定文本</div></div>
+                <div class="check on"><svg viewBox="0 0 16 16" style="width:12px;height:12px;"><path d="M3 8.4l3.2 3.2L13 4.8" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg></div>
+              </div>
+              <div class="row">
+                <svg class="ico" viewBox="0 0 24 24" style="stroke:#5C6B7A"><path d="M7 5v14M4 8h6M17 5v14M14 8h6"/></svg>
+                <div class="grow"><div class="n-1">添加前缀 / 后缀</div><div class="n-2">统一加标识，如「2026_」</div></div>
+                <div class="check"></div>
+              </div>
+              <div class="row">
+                <svg class="ico" viewBox="0 0 24 24" style="stroke:#5C6B7A"><path d="M5 6h4v4H5zM15 14h4v4h-4zM9 8h6v8"/></svg>
+                <div class="grow"><div class="n-1">序号编号</div><div class="n-2">按顺序追加 001、002…</div></div>
+                <div class="check"></div>
+              </div>
+              <div class="row">
+                <svg class="ico" viewBox="0 0 24 24" style="stroke:#5C6B7A"><path d="M4 7h16M4 12l4-5M8 12L4 7M4 17h10M18 14l2 3 2-3"/></svg>
+                <div class="grow"><div class="n-1">大小写转换</div><div class="n-2">全部小写 / 大写 / 首字母大写</div></div>
+                <div class="check"></div>
+              </div>
+              <div class="row">
+                <svg class="ico" viewBox="0 0 24 24" style="stroke:#5C6B7A"><path d="M5 5h6l2 2h8v11H5z"/><path d="M9 14h6"/></svg>
+                <div class="grow"><div class="n-1">修改扩展名</div><div class="n-2" style="color:#B47409;">仅作用于文件，谨慎使用</div></div>
+                <div class="check"></div>
+              </div>
+            </div>
+            <div class="mcard" style="margin-top:12px;background:#FFFDF8;border-style:dashed;">
+              <div style="font-size:11.5px;color:#8A5A08;font-weight:600;">
+                同一批只应用一种方式；需要叠加时重复执行一次即可
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2 查找替换 + 预览 -->
+      <div class="phone small">
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="batt"><i></i></span></span></div>
+          <div class="appbar" style="padding-bottom:6px;">
+            <div class="iconbtn"><svg class="ico" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></div>
+            <div style="flex:1;text-align:center;font-size:16px;font-weight:800;">查找替换</div><div style="width:36px;"></div>
+          </div>
+          <div class="content scroll" style="padding-top:8px;">
+            <div class="field" style="margin-bottom:10px;"><label>查找</label>
+              <div class="input"><span style="color:var(--ink);">IMG_</span></div>
+            </div>
+            <div class="field" style="margin-bottom:10px;"><label>替换为</label>
+              <div class="input"><span style="color:var(--ink);">旅行_</span></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:16px;padding:0 2px;">
+              <div style="display:flex;align-items:center;gap:7px;">
+                <div class="check on" style="width:18px;height:18px;"></div>
+                <span style="font-size:12px;font-weight:700;color:var(--ink2);">区分大小写</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:7px;">
+                <div class="check" style="width:18px;height:18px;"></div>
+                <span style="font-size:12px;font-weight:700;color:var(--ink2);">含扩展名</span>
+              </div>
+            </div>
+            <div class="sec-label">预览（4 项重命名 · 1 项不变）</div>
+            <div class="rows">
+              <div class="row" style="padding:10px 14px;">
+                <div class="grow">
+                  <div class="n-2" style="text-decoration:line-through;">IMG_0431.jpg</div>
+                  <div class="n-1" style="color:#12B886;">旅行_0431.jpg</div>
+                </div>
+              </div>
+              <div class="row" style="padding:10px 14px;">
+                <div class="grow">
+                  <div class="n-2" style="text-decoration:line-through;">IMG_0432.jpg</div>
+                  <div class="n-1" style="color:#12B886;">旅行_0432.jpg</div>
+                </div>
+              </div>
+              <div class="row" style="padding:10px 14px;background:#FFFBFB;">
+                <div class="grow">
+                  <div class="n-2" style="text-decoration:line-through;">IMG_0433.jpg</div>
+                  <div class="n-1" style="color:#E5484D;">旅行_0433.jpg</div>
+                  <div class="n-3" style="color:#E5484D;">目标名已存在，冲突</div>
+                </div>
+                <span class="pill d">冲突</span>
+              </div>
+              <div class="row" style="padding:10px 14px;opacity:.6;">
+                <div class="grow">
+                  <div class="n-1">说明.txt</div>
+                  <div class="n-3">不含查找文本，保持原名</div>
+                </div>
+                <span class="pill gray">跳过</span>
+              </div>
+            </div>
+            <div style="height:66px;"></div>
+          </div>
+          <div style="position:absolute;left:14px;right:14px;bottom:14px;display:flex;gap:10px;">
+            <div class="btn ghost" style="flex:1;">取消</div>
+            <div class="btn" style="flex:2;background:#C6CFDD;box-shadow:none;">应用（3 项可用）</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3 序号编号 -->
+      <div class="phone small">
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="batt"><i></i></span></span></div>
+          <div class="appbar" style="padding-bottom:6px;">
+            <div class="iconbtn"><svg class="ico" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></div>
+            <div style="flex:1;text-align:center;font-size:16px;font-weight:800;">序号编号</div><div style="width:36px;"></div>
+          </div>
+          <div class="content scroll" style="padding-top:8px;">
+            <div style="display:flex;gap:10px;">
+              <div class="field" style="flex:1;margin-bottom:10px;"><label>起始</label><div class="input" style="justify-content:center;"><span>1</span></div></div>
+              <div class="field" style="flex:1;margin-bottom:10px;"><label>步长</label><div class="input" style="justify-content:center;"><span>1</span></div></div>
+              <div class="field" style="flex:1;margin-bottom:10px;"><label>位数</label><div class="input" style="justify-content:center;"><span>3</span></div></div>
+            </div>
+            <div class="field" style="margin-bottom:10px;"><label>插入位置</label>
+              <div class="input" style="justify-content:space-between;">
+                <span>追加到名称后</span><span style="color:var(--ink3);">›</span>
+              </div>
+            </div>
+            <div class="field" style="margin-bottom:10px;"><label>连接符</label>
+              <div class="input" style="justify-content:space-between;">
+                <span>下划线 _</span><span style="color:var(--ink3);">›</span>
+              </div>
+            </div>
+            <div class="hint" style="margin-bottom:6px;">排序依据：当前列表顺序（可按名称 / 时间切换）</div>
+            <div class="sec-label">预览（5 项）</div>
+            <div class="rows">
+              <div class="row" style="padding:9px 14px;"><div class="grow"><div class="n-2" style="text-decoration:line-through;">照片.jpg</div><div class="n-1" style="color:#12B886;">照片_001.jpg</div></div></div>
+              <div class="row" style="padding:9px 14px;"><div class="grow"><div class="n-2" style="text-decoration:line-through;">笔记.pdf</div><div class="n-1" style="color:#12B886;">笔记_002.pdf</div></div></div>
+              <div class="row" style="padding:9px 14px;"><div class="grow"><div class="n-2" style="text-decoration:line-through;">素材</div><div class="n-1" style="color:#12B886;">素材_003</div></div></div>
+            </div>
+            <div style="height:66px;"></div>
+          </div>
+          <div style="position:absolute;left:14px;right:14px;bottom:14px;display:flex;gap:10px;">
+            <div class="btn ghost" style="flex:1;">取消</div>
+            <div class="btn" style="flex:2;">应用（5 项）</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4 执行与结果 -->
+      <div class="phone small">
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="batt"><i></i></span></span></div>
+          <div class="appbar" style="padding-bottom:6px;">
+            <div class="iconbtn"><svg class="ico" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></div>
+            <div style="flex:1;text-align:center;font-size:16px;font-weight:800;">查找替换</div><div style="width:36px;"></div>
+          </div>
+          <div class="content scroll" style="padding-top:10px;">
+            <div class="mcard" style="text-align:center;padding:20px 16px;">
+              <div class="spinner" style="margin:0 auto 12px;"></div>
+              <div style="font-size:13.5px;font-weight:800;">正在重命名 2 / 5</div>
+              <div class="n-2" style="margin-top:4px;">逐项执行，失败项会自动跳过</div>
+            </div>
+            <div class="sec-label">已完成</div>
+            <div class="rows">
+              <div class="row" style="padding:10px 14px;">
+                <svg class="ico sm" viewBox="0 0 24 24" style="stroke:#12B886"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                <div class="grow"><div class="n-1" style="font-size:13px;">旅行_0431.jpg</div></div>
+                <span class="pill g">成功</span>
+              </div>
+              <div class="row" style="padding:10px 14px;">
+                <svg class="ico sm" viewBox="0 0 24 24" style="stroke:#12B886"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                <div class="grow"><div class="n-1" style="font-size:13px;">旅行_0432.jpg</div></div>
+                <span class="pill g">成功</span>
+              </div>
+              <div class="row" style="padding:10px 14px;background:#FFFBFB;">
+                <svg class="ico sm" viewBox="0 0 24 24" style="stroke:#E5484D"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                <div class="grow"><div class="n-1" style="font-size:13px;">IMG_0433.jpg</div><div class="n-3" style="color:#E5484D;">目标名已存在</div></div>
+                <span class="pill d">失败</span>
+              </div>
+            </div>
+            <div style="height:66px;"></div>
+          </div>
+          <div style="position:absolute;left:14px;right:14px;bottom:14px;">
+            <div class="btn" style="width:100%;">完成</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stage-note">
+        <h4>⑧ 批量重命名</h4>
+        <p class="sub">入口：批量操作 →「更多」→ 批量重命名（第 ⑦ 页占位项）；仅对已选中的同类项生效</p>
+
+        <ul class="kv">
+          <li><span class="tag">流程</span>选规则 → <b>实时预览新旧名</b> → 逐项执行 → 汇总结果。预览阶段就暴露冲突，不在执行后才发现。</li>
+          <li><span class="tag">五种方式</span>① 查找替换（可勾「区分大小写」「含扩展名」）② 添加前缀 / 后缀 ③ 序号编号（起始 / 步长 / 位数 / 插入位置 / 连接符）④ 大小写转换 ⑤ 修改扩展名（<span style="color:#B47409;">仅文件</span>，需二次确认）。<b>同一批只应用一种方式</b>，需要叠加就再执行一次。</li>
+          <li><span class="tag g">预览</span>每行显示「原名 → 新名」，差异用删除线 + 绿色新名；不含匹配文本的项标「跳过」不计入数量；应用按钮写明「应用（N 项可用）」。</li>
+          <li><span class="tag d">冲突拦截</span>三类冲突在预览中即标红并<b>禁用该项</b>：目标名已存在 / 本批内部重名（序号撞车）/ 清洗后名称为空。不提供「强制覆盖」，避免误删数据。</li>
+          <li><span class="tag w">顺序</span>序号按<b>当前列表顺序</b>；列表可按名称 / 时间排序后再执行，避免序号与直觉不符。</li>
+          <li><span class="tag">扩展名</span>默认只改主名（不含扩展名），避免 photo.jpg → photo.png 打不开；勾选「含扩展名」或使用「修改扩展名」时给出橙色提示。</li>
+          <li><span class="tag">文件夹</span>文件夹名可参与（无扩展名）；含文件夹与文件混合选择时，「修改扩展名」只作用于文件，文件夹自动跳过。</li>
+          <li><span class="tag">执行</span>逐项调用 <code>rename</code>，受限并发 3；单项失败不中断整批，失败项保留原名并列出原因（如「目标名已存在」）；完成后若失败项 ≥1，选择状态保留这些项便于重试。</li>
+          <li><span class="tag w">边界</span>沿用第 ⑦ 页规则：不跨目录、单次上限 200 项、名称非法字符自动替换为 <code>_</code>、Windows 保留名自动加前缀、超长按字素截断。</li>
+          <li><span class="tag">不做</span>正则表达式替换、按 EXIF 日期重命名 —— 本期不实现，规则区不做入口，避免半成品功能。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== ⑨ 隔离与存储 ===================== -->
   <div class="panel" id="p7">
     <div class="iso" style="margin-bottom:18px;">
       <div class="iso-col">
@@ -1151,8 +1374,8 @@
       </div>
 
       <div class="stage-note">
-        <h4>⑨ 异常与确认态</h4>
-        <p class="sub">配合账户管理页使用；批量删除确认见第 ② 页、文件批量删除见第 ⑦ 页</p>
+        <h4>⑩ 异常与确认态</h4>
+        <p class="sub">配合账户管理页使用；批量删除确认见第 ② 页、文件批量删除见第 ⑦ 页、重命名冲突见第 ⑧ 页</p>
         <ul class="kv">
           <li><span class="tag w">失效</span>账户管理页顶部橙色提示条 + 列表行「失效」标记，一键重新验证；本地沙箱数据保留，不静默失败。</li>
           <li><span class="tag">切换中</span>校验 → 加载沙箱 → 恢复浏览位置，短暂 loading；失败则回滚到原账户并提示，绝不出现「无当前账户」的空白界面。</li>
@@ -1175,6 +1398,7 @@
           <tr><td><b>架构</b></td><td>底部导航「文件 / 任务 / 设置」；账户管理为设置页内的独立二级页；桌面端内容最大宽度 720 居中</td></tr>
           <tr><td><b>存储</b></td><td>Windows 便携版数据落在 <code>程序目录/userdata/prefs.json</code>；其他平台使用系统应用目录</td></tr>
           <tr><td><b>批量操作</b></td><td>文件 / 文件夹多选：长按或「选择」进入，批量下载、移动、复制、删除；文件夹下载按递归展开为文件队列</td></tr>
+          <tr><td><b>批量重命名</b></td><td>查找替换 / 前后缀 / 序号编号 / 大小写 / 扩展名，先预览后执行，冲突在预览阶段拦截</td></tr>
           <tr><td><b>视觉</b></td><td>设计令牌统一：主色 #4C6FFF、背景 #F4F7FA、卡片 20 圆角、三级文字、20px 图标</td></tr>
         </tbody>
       </table>
