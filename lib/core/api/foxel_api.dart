@@ -6,7 +6,9 @@ import 'package:http/http.dart' as http;
 
 import 'package:foxel/core/api/foxel_api_exception.dart';
 import 'package:foxel/core/models/adapter_usage.dart';
+import 'package:foxel/core/models/compression.dart';
 import 'package:foxel/core/models/file_entry.dart';
+import 'package:foxel/core/models/server_task.dart';
 import 'package:foxel/core/models/session.dart';
 import 'package:foxel/core/models/user_profile.dart';
 import 'package:foxel/core/utils/path_utils.dart' as path_utils;
@@ -246,6 +248,70 @@ class FoxelApi {
     _decodeWrapped(response);
   }
 
+  // ------------------------------------------------------------ 压缩 / 任务队列
+
+  /// 查询某个目录路径的压缩能力。
+  ///
+  /// 服务端在路径不存在时返回 404，此时按「不支持」处理而不是抛错，
+  /// 避免用户仅仅因为父目录缺失就看到一个报错弹窗。
+  Future<CompressionCapability> compressionCapabilities(String path) async {
+    try {
+      final data = await _getJson('/fs/compression', {
+        'path': path_utils.cleanPath(path),
+      });
+      return CompressionCapability.fromJson(data);
+    } on FoxelApiException catch (error) {
+      if (error.statusCode == 404) {
+        return const CompressionCapability(
+          formats: <String>[],
+          native: false,
+        );
+      }
+      rethrow;
+    }
+  }
+
+  /// 创建 ZIP 压缩包。
+  ///
+  /// [dst] 必须是完整的目标文件路径且以 `.zip` 结尾（服务端强制校验）。
+  Future<CompressResult> compress({
+    required List<String> sources,
+    required String dst,
+  }) async {
+    final data = await _postJsonData('/fs/compress', {
+      'sources': <String>[
+        for (final source in sources) path_utils.cleanPath(source),
+      ],
+      'dst': path_utils.cleanPath(dst),
+    });
+    if (data is Map<String, dynamic>) {
+      return CompressResult.fromJson(data);
+    }
+    throw const FoxelApiException('压缩响应格式不正确');
+  }
+
+  /// 服务端任务队列全量列表。
+  Future<List<ServerTask>> taskQueue() async {
+    final data = await _getJsonList('/tasks/queue');
+    return data
+        .whereType<Map<String, dynamic>>()
+        .map(ServerTask.fromJson)
+        .toList();
+  }
+
+  /// 单个服务端任务的实时状态；任务不存在时返回 null。
+  Future<ServerTask?> serverTask(String taskId) async {
+    try {
+      final data = await _getJson('/tasks/queue/$taskId');
+      return ServerTask.fromJson(data);
+    } on FoxelApiException catch (error) {
+      if (error.statusCode == 404) {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
   Uri streamUri(String path) =>
       _uri('/fs/stream/${path_utils.encodePath(path)}');
 
@@ -311,6 +377,19 @@ class FoxelApi {
       body: jsonEncode(payload),
     );
     _decodeWrapped(response);
+  }
+
+  /// 同 [_postJson]，但把 `data` 返回给调用方（压缩接口需要读结果）。
+  Future<dynamic> _postJsonData(
+    String path,
+    Map<String, dynamic> payload,
+  ) async {
+    final response = await _client.post(
+      _uri(path),
+      headers: _headers(json: true),
+      body: jsonEncode(payload),
+    );
+    return _decodeWrapped(response);
   }
 
   dynamic _decodeWrapped(http.Response response) {

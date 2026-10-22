@@ -14,6 +14,7 @@ import 'package:foxel/core/theme/design_tokens.dart';
 import 'package:foxel/features/accounts/widgets/account_avatar.dart';
 import 'package:foxel/features/drive/controllers/transfer_task_controller.dart';
 import 'package:foxel/features/drive/pages/batch_rename_page.dart';
+import 'package:foxel/features/drive/pages/compress_sheet.dart';
 import 'package:foxel/features/drive/pages/directory_picker_page.dart';
 import 'package:foxel/features/media/pages/image_viewer_page.dart';
 import 'package:foxel/features/media/pages/video_player_page.dart';
@@ -574,6 +575,15 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                 },
               ),
               _ActionRow(
+                icon: Icons.archive_rounded,
+                label: '压缩为 ZIP',
+                trailing: const _NewPill(),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _compressSelection();
+                },
+              ),
+              _ActionRow(
                 icon: Icons.drive_file_move_outline,
                 label: '移动到…',
                 onTap: () {
@@ -633,6 +643,109 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     final navBottom = safeBottom > navMinInset ? safeBottom : navMinInset;
     return navBottom + navHeight + gap;
   }
+
+  // ---------------------------------------------------------------- 压缩
+
+  /// 压缩包的默认名：去掉扩展名，本身的 zip 再压时加后缀避免与源同名。
+  static String _archiveNameFor(String baseName) {
+    final lower = baseName.toLowerCase();
+    if (lower.endsWith('.zip')) {
+      return '${baseName.substring(0, baseName.length - 4)}-压缩';
+    }
+    final dot = baseName.lastIndexOf('.');
+    if (dot > 0) {
+      return baseName.substring(0, dot);
+    }
+    return baseName;
+  }
+
+  /// 多选时的默认名：用当前目录名，根目录退化为 archive。
+  String get _directoryArchiveName {
+    if (_path == '/') {
+      return 'archive';
+    }
+    final index = _path.lastIndexOf('/');
+    final name = index >= 0 ? _path.substring(index + 1) : _path;
+    return name.isEmpty ? 'archive' : '$name-归档';
+  }
+
+  /// 已选条目里「已知体积」之和。
+  ///
+  /// 文件夹内部体积需要递归遍历才能得到，这里不发起额外请求，
+  /// 只统计列表里直接可见的文件，标注为「合计」而不是精确总量。
+  int _knownBytesOf(List<String> sources) {
+    var total = 0;
+    for (final entry in _visibleEntryList) {
+      if (entry.isDir) {
+        continue;
+      }
+      if (sources.contains(FoxelApi.joinPath(_path, entry.name))) {
+        total += entry.size;
+      }
+    }
+    return total;
+  }
+
+  Future<void> _startCompress({
+    required List<String> sources,
+    required String defaultName,
+  }) async {
+    if (sources.isEmpty) {
+      return;
+    }
+    final outcome = await showCompressSheet(
+      context: context,
+      api: widget.api,
+      sources: sources,
+      initialDir: _path,
+      defaultName: defaultName,
+      sourceBytes: _knownBytesOf(sources),
+      formatSize: _formatSize,
+    );
+    if (outcome == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _selecting = false;
+      _selectedPaths.clear();
+    });
+    _refresh();
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          outcome.queued
+              ? '已加入服务端任务队列，可在「任务」中查看进度'
+              : '已创建 ${outcome.name}',
+        ),
+        action: outcome.queued
+            ? SnackBarAction(label: '查看', onPressed: widget.onOpenTasks)
+            : null,
+      ),
+    );
+  }
+
+  /// 压缩当前选中的条目。
+  Future<void> _compressSelection() async {
+    final selected = _selectedEntries;
+    if (selected.isEmpty) {
+      return;
+    }
+    // 服务端要求 sources 内名称唯一，同名项无法共享同一个归档内路径。
+    final names = <String>{};
+    for (final entry in selected) {
+      if (!names.add(entry.name)) {
+        _showMessage('选中的项目里有同名条目，请只保留一个再压缩');
+        return;
+      }
+    }
+    await _startCompress(
+      sources: [for (final path in _selectedPaths) FoxelApi.cleanPath(path)],
+      defaultName: _directoryArchiveName,
+    );
+  }
+
 
   String _nameOf(String path) {
     if (path == '/') {
@@ -991,6 +1104,18 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                       _downloadEntry(entry);
                     },
                   ),
+                _ActionRow(
+                  icon: Icons.archive_rounded,
+                  label: '压缩为 ZIP',
+                  trailing: const _NewPill(),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _startCompress(
+                      sources: [fullPath],
+                      defaultName: _archiveNameFor(entry.name),
+                    );
+                  },
+                ),
                 _ActionRow(
                   icon: Icons.drive_file_rename_outline_rounded,
                   label: '重命名',
@@ -1392,6 +1517,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                     count: _selectedPaths.length,
                     busy: _batchBusy,
                     onDownload: _batchDownload,
+                    onCompress: _compressSelection,
                     onMove: () => _batchTransfer(move: true),
                     onCopy: () => _batchTransfer(move: false),
                     onDelete: _batchDelete,
@@ -1560,6 +1686,7 @@ class _BatchActionBar extends StatelessWidget {
     required this.count,
     required this.busy,
     required this.onDownload,
+    required this.onCompress,
     required this.onMove,
     required this.onCopy,
     required this.onDelete,
@@ -1569,6 +1696,7 @@ class _BatchActionBar extends StatelessWidget {
   final int count;
   final bool busy;
   final VoidCallback onDownload;
+  final VoidCallback onCompress;
   final VoidCallback onMove;
   final VoidCallback onCopy;
   final VoidCallback onDelete;
@@ -1603,6 +1731,12 @@ class _BatchActionBar extends StatelessWidget {
                     label: '下载',
                     color: AppColors.primary,
                     onTap: enabled ? onDownload : null,
+                  ),
+                  _BatchAction(
+                    icon: Icons.archive_rounded,
+                    label: '压缩',
+                    color: AppColors.primary,
+                    onTap: enabled ? onCompress : null,
                   ),
                   _BatchAction(
                     icon: Icons.drive_file_move_outline,
@@ -2668,6 +2802,7 @@ class _ActionRow extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.destructive = false,
+    this.trailing,
   });
 
   final IconData icon;
@@ -2675,14 +2810,43 @@ class _ActionRow extends StatelessWidget {
   final VoidCallback onTap;
   final bool destructive;
 
+  /// 行尾附加内容（如「新增」胶囊）。
+  final Widget? trailing;
+
   @override
   Widget build(BuildContext context) {
     final color = destructive ? const Color(0xFFDC2626) : null;
     return ListTile(
       leading: Icon(icon, color: color),
       title: Text(label, style: TextStyle(color: color)),
+      trailing: trailing,
       onTap: onTap,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    );
+  }
+}
+
+/// 「新增」胶囊：只用于本次新增的入口，帮助老用户发现新功能。
+class _NewPill extends StatelessWidget {
+  const _NewPill();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+      ),
+      child: const Text(
+        '新增',
+        style: TextStyle(
+          fontSize: 9.5,
+          fontWeight: FontWeight.w800,
+          color: Colors.white,
+          letterSpacing: 0.4,
+        ),
+      ),
     );
   }
 }
