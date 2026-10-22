@@ -95,6 +95,7 @@ class DriveShellPageState extends State<DriveShellPage> {
       1 => TransferTasksPage(
         key: ValueKey<String>('tasks-${widget.account.id}'),
         controller: widget.taskController,
+        api: widget.api,
       ),
       _ => SettingsPage(
         key: ValueKey<String>('settings-${widget.account.id}'),
