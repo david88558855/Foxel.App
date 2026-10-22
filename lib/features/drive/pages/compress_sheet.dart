@@ -426,9 +426,22 @@ class _CompressSheetState extends State<_CompressSheet> {
                     fontWeight: FontWeight.w700,
                     color: AppColors.ink,
                   ),
+                  // 外框由上面的 Container 绘制，这里必须彻底清空 InputDecorator
+                  // 自己的边框。只写 `border: InputBorder.none` 不够：
+                  // 边框回退链是 decoration.enabledBorder → theme.enabledBorder
+                  // → decoration.border，而全局 inputDecorationTheme 配了
+                  // enabledBorder / focusedBorder，它们优先级高于 border，
+                  // 结果就是外框里再套一个 14 圆角的内框（聚焦时还会变蓝）。
+                  // 因此逐状态覆盖，并用 contentPadding 撑出可点击高度。
                   decoration: const InputDecoration(
-                    isDense: true,
+                    filled: false,
                     border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    errorBorder: InputBorder.none,
+                    focusedErrorBorder: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(vertical: 12),
                     hintText: '输入压缩包名称',
                     hintStyle: TextStyle(
                       fontSize: 14.5,
