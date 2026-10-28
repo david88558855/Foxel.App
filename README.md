@@ -167,7 +167,7 @@ flutter build ios --release --no-codesign     # iOS（未签名）
 
 ### 4.4 直接下载安装包
 
-当前 Release **v1.0.9**（点击表格中的格式即可下载）：
+当前 Release **v1.0.10**（点击表格中的格式即可下载）：
 
 | 架构 | Windows | macOS | Linux | Android | iOS |
 |---|---|---|---|---|---|
