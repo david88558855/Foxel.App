@@ -9,6 +9,7 @@ import 'package:foxel/core/widgets/content_frame.dart';
 ///
 /// 返回选中的目录路径（String），取消返回 null。
 /// [blockedPaths] 内的目录及其下级不可选（例如移动自身或自身的子目录）。
+/// [exactBlockedPaths] 只禁掉该目录本身，其子目录仍可选（例如来源目录）。
 class DirectoryPickerPage extends StatefulWidget {
   const DirectoryPickerPage({
     super.key,
@@ -16,6 +17,7 @@ class DirectoryPickerPage extends StatefulWidget {
     required this.title,
     this.initialPath = '/',
     this.blockedPaths = const <String>{},
+    this.exactBlockedPaths = const <String>{},
     this.actionLabel = '选择此文件夹',
   });
 
@@ -23,6 +25,7 @@ class DirectoryPickerPage extends StatefulWidget {
   final String title;
   final String initialPath;
   final Set<String> blockedPaths;
+  final Set<String> exactBlockedPaths;
   final String actionLabel;
 
   @override
@@ -38,6 +41,14 @@ class _DirectoryPickerPageState extends State<DirectoryPickerPage> {
 
   bool _isBlocked(String path) {
     final clean = path == '/' ? '/' : path.replaceAll(RegExp(r'/+$'), '');
+    for (final blocked in widget.exactBlockedPaths) {
+      final target = blocked == '/'
+          ? '/'
+          : blocked.replaceAll(RegExp(r'/+$'), '');
+      if (clean == target) {
+        return true;
+      }
+    }
     for (final blocked in widget.blockedPaths) {
       final target = blocked == '/'
           ? '/'

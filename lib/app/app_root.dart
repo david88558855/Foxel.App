@@ -357,16 +357,47 @@ class _AppRootState extends State<AppRoot> {
   }
 
   /// 为新账户落定默认下载目录（已有设置不覆盖，避免下载文件「搬家」）。
+  ///
+  /// [previous] 用于编辑场景：仅当「独立下载目录」开关确实变了、且当前目录
+  /// 仍是上一版自动生成的默认值时，才跟着切换；用户自定义过的目录一律不动。
   Future<void> _ensureDefaultDownloadDir(
     Account account, {
     required bool isNew,
+    Account? previous,
   }) async {
-    if (!isNew) {
+    if (isNew) {
+      if (await DownloadDirStore.hasCustomDirFor(account.id)) {
+        return;
+      }
+      final dir = await _computedDefaultDir(account);
+      if (dir.isNotEmpty) {
+        await DownloadDirStore.setDirFor(account.id, dir);
+      }
       return;
     }
-    if (await DownloadDirStore.hasCustomDirFor(account.id)) {
+
+    if (previous == null ||
+        previous.isolatedDownloadDir == account.isolatedDownloadDir) {
       return;
     }
+    final saved = await DownloadDirStore.savedDirFor(account.id);
+    if (saved == null) {
+      // 没有落盘记录：解析时会按新开关计算，无需处理。
+      return;
+    }
+    final previousDefault = await _computedDefaultDir(previous);
+    if (saved.trim() != previousDefault.trim()) {
+      // 用户手工指定过目录，不因开关变化强行搬走。
+      return;
+    }
+    final next = await _computedDefaultDir(account);
+    if (next.isNotEmpty) {
+      await DownloadDirStore.setDirFor(account.id, next);
+    }
+  }
+
+  /// 按当前账户列表计算某个账户的默认下载目录（含重名后缀）。
+  Future<String> _computedDefaultDir(Account account) async {
     final folderName = DownloadDirStore.sanitizeFolderName(account.alias);
     final duplicated =
         folderName.isNotEmpty &&
@@ -378,13 +409,10 @@ class _AppRootState extends State<AppRoot> {
     final shortId = account.id.length > 6
         ? account.id.substring(account.id.length - 6)
         : account.id;
-    final dir = await DownloadDirStore.defaultDirForAccount(
+    return DownloadDirStore.defaultDirForAccount(
       account,
       disambiguator: duplicated ? shortId : null,
     );
-    if (dir.isNotEmpty) {
-      await DownloadDirStore.setDirFor(account.id, dir);
-    }
   }
 
   Account? _findDuplicate(Account account) {
@@ -424,6 +452,13 @@ class _AppRootState extends State<AppRoot> {
           onSave: (updated, {bool switchAfterAdd = false}) async {
             await _store.upsert(updated);
             await _reload();
+            // 「独立下载目录」开关可能在编辑页被改过：自动生成的目录要跟着走，
+            // 用户自定义过的目录保持不动。
+            await _ensureDefaultDownloadDir(
+              updated,
+              isNew: false,
+              previous: account,
+            );
             if (!mounted) {
               return;
             }

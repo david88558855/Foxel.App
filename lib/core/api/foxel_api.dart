@@ -181,9 +181,18 @@ class FoxelApi {
       _throwHttpError(http.Response.bytes(body, response.statusCode));
     }
 
-    // 若目标文件下载前就存在，失败时不能删除它（那是用户的文件）。
-    final existedBefore = await outputFile.exists();
-    final sink = outputFile.openWrite();
+    // 先写同目录下的 .part 临时文件，全部收完再改名覆盖：
+    // 中途失败不会破坏本地已存在的同名文件（旧实现会把它截断成半截）。
+    final partFile = File('${outputFile.path}.part');
+    try {
+      if (await partFile.exists()) {
+        await partFile.delete();
+      }
+      await outputFile.parent.create(recursive: true);
+    } catch (_) {
+      // 清理或建目录失败不在这里处理，下面的 openWrite 会抛出更明确的错误。
+    }
+    final sink = partFile.openWrite();
     var received = 0;
     final total = response.contentLength;
     onProgress?.call(0, total);
@@ -193,25 +202,32 @@ class FoxelApi {
         sink.add(chunk);
         onProgress?.call(received, total);
       }
+      await sink.close();
     } catch (_) {
       try {
         await sink.close();
       } catch (_) {
         // 关闭失败无所谓，下面会清理掉残缺文件。
       }
-      // 失败时清掉本次新建的残缺文件，避免用户误以为下载成功。
-      if (!existedBefore) {
-        try {
-          if (await outputFile.exists()) {
-            await outputFile.delete();
-          }
-        } catch (_) {
-          // 清理失败不影响抛出原始错误。
+      // 失败时清掉本次产生的残缺文件，避免用户误以为下载成功。
+      try {
+        if (await partFile.exists()) {
+          await partFile.delete();
         }
+      } catch (_) {
+        // 清理失败不影响抛出原始错误。
       }
       rethrow;
     }
-    await sink.close();
+    try {
+      await partFile.rename(outputFile.path);
+    } on FileSystemException {
+      // 个别文件系统不支持「改名覆盖」：退化为先删目标再改名。
+      if (await outputFile.exists()) {
+        await outputFile.delete();
+      }
+      await partFile.rename(outputFile.path);
+    }
     onProgress?.call(received, total);
   }
 

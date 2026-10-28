@@ -62,6 +62,16 @@ class DownloadDirStore {
     return saved != null && saved.trim().isNotEmpty;
   }
 
+  /// 已落盘的下载目录（未配置时为 null），用于区分「自动生成」与「用户自定义」。
+  static Future<String?> savedDirFor(String accountId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(dirKeyFor(accountId));
+    if (saved == null || saved.trim().isEmpty) {
+      return null;
+    }
+    return saved.trim();
+  }
+
   /// 文件夹名最大长度（含重名后缀）。
   static const int maxFolderNameLength = 40;
 

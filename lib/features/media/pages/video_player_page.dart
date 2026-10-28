@@ -253,7 +253,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   Future<void> _seekBy(Duration offset) async {
     final target = _position + offset;
     await _seekToAndPlay(target);
-    _showControlsTemporarily();
+    if (mounted) {
+      _showControlsTemporarily();
+    }
   }
 
   Future<void> _seekTo(Duration target) async {
@@ -265,21 +267,30 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     await _player.seek(clamped);
   }
 
+  /// 跳转后保持原有播放状态：暂停时只移动进度，不会自动播起来。
   Future<void> _seekToAndPlay(Duration target) async {
+    final wasPlaying = _isPlaying;
     await _seekTo(target);
+    if (!wasPlaying) {
+      return;
+    }
     await _player.play();
   }
 
   Future<void> _setPlaybackSpeed(double speed) async {
     setState(() => _playbackSpeed = speed);
     await _player.setRate(speed);
-    _showControlsTemporarily();
+    if (mounted) {
+      _showControlsTemporarily();
+    }
   }
 
   Future<void> _setVolume(double volume) async {
     setState(() => _volume = volume);
     await _player.setVolume(volume * 100);
-    _showControlsTemporarily();
+    if (mounted) {
+      _showControlsTemporarily();
+    }
   }
 
   Future<void> _toggleMute() async {

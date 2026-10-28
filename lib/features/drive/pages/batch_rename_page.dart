@@ -183,15 +183,25 @@ class _BatchRenamePageState extends State<BatchRenamePage> {
     final usable = preview.where((item) => item.isUsable).length;
     final changed = preview.where((item) => item.isChanged).length;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('批量重命名'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.of(context).pop(_appliedCount > 0),
+    return PopScope(
+      // 系统返回键 / 侧滑返回也要带回「是否已改名」，否则上一页不会刷新列表。
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        // 运行中不允许离开，否则改名结果会连同刷新一起丢失。
+        if (didPop || _running) {
+          return;
+        }
+        Navigator.of(context).pop(_appliedCount > 0);
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text('批量重命名'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () => Navigator.of(context).pop(_appliedCount > 0),
+          ),
         ),
-      ),
       body: SafeArea(
         top: false,
         child: ContentFrame(
@@ -248,6 +258,7 @@ class _BatchRenamePageState extends State<BatchRenamePage> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

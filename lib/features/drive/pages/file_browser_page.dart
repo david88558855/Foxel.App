@@ -403,24 +403,26 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     };
     // 提前置位：目录选择页弹出期间若仍可点，会叠加第二次提交
     setState(() => _batchBusy = true);
-    final target = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
-        builder: (_) => DirectoryPickerPage(
-          api: widget.api,
-          title: move ? '移动到…' : '复制到…',
-          initialPath: _path,
-          // 禁止选到自身、其后代，以及来源目录本身（否则 dst == src）
-          blockedPaths: <String>{base, ...sourcePaths},
-          actionLabel: move ? '移动到此处' : '复制到此处',
-        ),
-      ),
-    );
-    if (target == null || !mounted) {
-      return;
-    }
-
-    setState(() => _batchBusy = true);
+    // 取消弹层 / 页面销毁的路径都必须复位，否则批量栏会永久卡在忙碌态。
     try {
+      final target = await Navigator.of(context).push<String>(
+        MaterialPageRoute<String>(
+          builder: (_) => DirectoryPickerPage(
+            api: widget.api,
+            title: move ? '移动到…' : '复制到…',
+            initialPath: _path,
+            // 禁止选到被移动/复制的条目自身及其后代
+            blockedPaths: sourcePaths,
+            // 来源目录本身不可作为目标（dst == src），但它的子目录可以
+            exactBlockedPaths: <String>{base},
+            actionLabel: move ? '移动到此处' : '复制到此处',
+          ),
+        ),
+      );
+      if (target == null || !mounted) {
+        return;
+      }
+
       final failures = await _runLimited<FileEntry>(selected, (entry) async {
         final src = FoxelApi.joinPath(base, entry.name);
         final dst = FoxelApi.joinPath(target, entry.name);
@@ -439,6 +441,14 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
         _refresh();
         _showMessage('已${move ? '移动' : '复制'} $ok 项到「${_nameOf(target)}」');
       } else {
+        // 失败项保留选中，便于重试（按条目精确剔除成功项）。
+        final failedPaths = <String>{
+          for (final failure in failures)
+            FoxelApi.joinPath(base, failure.item.name),
+        };
+        setState(() {
+          _selectedPaths.retainWhere(failedPaths.contains);
+        });
         _refresh();
         _showMessage(
           '已${move ? '移动' : '复制'} $ok 项，${failures.length} 项失败：'
@@ -465,40 +475,39 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
 
     // 提前置位：确认框弹出期间禁止重复触发
     setState(() => _batchBusy = true);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('删除 ${selected.length} 项？'),
-        content: Text(
-          '包含 ${files > 0 ? '$files 个文件' : ''}'
-          '${files > 0 && folders > 0 ? '与' : ''}'
-          '${folders > 0 ? '$folders 个文件夹及其全部内容' : ''}'
-          '${size > 0 ? '，合计约 ${_formatSize(size)}' : ''}。\n'
-          '服务器上的文件将被删除，此操作不可撤销。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.danger,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text('删除 ${selected.length} 项'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) {
-      return;
-    }
-
     final base = _path;
-    setState(() => _batchBusy = true);
     try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('删除 ${selected.length} 项？'),
+          content: Text(
+            '包含 ${files > 0 ? '$files 个文件' : ''}'
+            '${files > 0 && folders > 0 ? '与' : ''}'
+            '${folders > 0 ? '$folders 个文件夹及其全部内容' : ''}'
+            '${size > 0 ? '，合计约 ${_formatSize(size)}' : ''}。\n'
+            '服务器上的文件将被删除，此操作不可撤销。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.danger,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text('删除 ${selected.length} 项'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) {
+        return;
+      }
+
       final failures = await _runLimited<FileEntry>(selected, (entry) async {
         await widget.api.deletePath(FoxelApi.joinPath(base, entry.name));
       });
@@ -534,20 +543,26 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       return;
     }
     setState(() => _batchBusy = true);
-    final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
-        builder: (_) => BatchRenamePage(
-          api: widget.api,
-          directoryPath: _path,
-          targets: selected,
-          existingNames: _unselectedNames,
+    try {
+      final changed = await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          builder: (_) => BatchRenamePage(
+            api: widget.api,
+            directoryPath: _path,
+            targets: selected,
+            existingNames: _unselectedNames,
+          ),
         ),
-      ),
-    );
-    if (changed == true && mounted) {
-      _exitSelection();
-      _refresh();
-      _showMessage('批量重命名已完成');
+      );
+      if (changed == true && mounted) {
+        _exitSelection();
+        _refresh();
+        _showMessage('批量重命名已完成');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _batchBusy = false);
+      }
     }
   }
 
