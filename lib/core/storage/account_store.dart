@@ -18,6 +18,9 @@ class AccountStore {
   /// 否则用户删光账户后重启会被再次迁移出「默认账户」。
   static const _migrationKey = 'foxel_migration_v2_done';
 
+  /// 「独立媒体缓存」关闭时的共享分区前缀（如播放进度），随账户清理一并清掉。
+  static const _sharedCachePrefix = 'foxel_acc_shared_';
+
   /// 旧版本（单会话）遗留 key，仅用于迁移。
   static const _legacyBaseUrlKey = 'foxel_base_url';
   static const _legacyUsernameKey = 'foxel_username';
@@ -298,7 +301,8 @@ class AccountStore {
 
     final prefix = 'foxel_acc_${id}_';
     for (final key in prefs.getKeys().toList()) {
-      if (key.startsWith(prefix)) {
+      // 关闭「独立媒体缓存」时播放进度写在共享分区，也一并清掉，否则会残留并串味。
+      if (key.startsWith(prefix) || key.startsWith(_sharedCachePrefix)) {
         await prefs.remove(key);
       }
     }
@@ -343,7 +347,8 @@ class AccountStore {
     final prefs = await SharedPreferences.getInstance();
     final prefix = 'foxel_acc_${id}_';
     for (final key in prefs.getKeys().toList()) {
-      if (key.startsWith(prefix) && key != tokenKey(id)) {
+      if (key.startsWith(_sharedCachePrefix) ||
+          (key.startsWith(prefix) && key != tokenKey(id))) {
         await prefs.remove(key);
       }
     }

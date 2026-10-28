@@ -204,8 +204,12 @@ class DownloadDirStore {
   /// 解析账户下载目录并确保存在。
   ///
   /// 平台查询不到可用目录时（返回空串）抛出可读错误，避免对空路径建目录。
-  static Future<Directory> resolveFor(String accountId) async {
-    final path = await currentDirFor(accountId);
+  /// 传入 [account] 时按「显示名称」计算默认目录，与设置页展示保持一致。
+  static Future<Directory> resolveFor(
+    String accountId, {
+    Account? account,
+  }) async {
+    final path = await currentDirFor(accountId, account: account);
     if (path.trim().isEmpty) {
       throw const FileSystemException('无法确定下载目录，请在「设置 → 下载目录」中手动指定');
     }
@@ -248,11 +252,11 @@ class DownloadDirStore {
   }
 
   /// 统计账户下载目录已占用的字节数（不存在时返回 0）。
-  static Future<int> dirSizeBytes(String accountId) async {
+  static Future<int> dirSizeBytes(String accountId, {Account? account}) async {
     if (kIsWeb) {
       return 0;
     }
-    final path = await currentDirFor(accountId);
+    final path = await currentDirFor(accountId, account: account);
     if (path.isEmpty) {
       return 0;
     }

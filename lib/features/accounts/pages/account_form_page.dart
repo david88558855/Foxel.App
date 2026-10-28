@@ -98,6 +98,7 @@ class _AccountFormPageState extends State<AccountFormPage> {
       final reuseToken =
           existing != null &&
           existing.baseUrl == normalized &&
+          existing.token.isNotEmpty &&
           password.isEmpty;
 
       String token;
@@ -114,8 +115,11 @@ class _AccountFormPageState extends State<AccountFormPage> {
           resolvedUsername = profile.username.isEmpty
               ? existing.username
               : profile.username;
-          email = profile.email;
-          avatarUrl = profile.avatarUrl;
+          // 服务端没返回的字段沿用本地值，别把已有邮箱/头像洗掉。
+          email = profile.email.isEmpty ? existing.email : profile.email;
+          avatarUrl = profile.avatarUrl.isEmpty
+              ? existing.avatarUrl
+              : profile.avatarUrl;
         } finally {
           client.close();
         }

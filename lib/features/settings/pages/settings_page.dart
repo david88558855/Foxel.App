@@ -56,20 +56,28 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _loadDownloadDir() async {
+    final accountId = widget.account.id;
     final dir = await DownloadDirStore.currentDirFor(
       widget.account.id,
       account: widget.account,
     );
-    if (mounted) {
-      setState(() => _downloadDir = dir);
+    // 统计/查询期间可能已切换账户：只接受当前账户的结果。
+    if (!mounted || widget.account.id != accountId) {
+      return;
     }
+    setState(() => _downloadDir = dir);
   }
 
   Future<void> _loadUsage() async {
-    final bytes = await DownloadDirStore.dirSizeBytes(widget.account.id);
-    if (mounted) {
-      setState(() => _usageBytes = bytes);
+    final accountId = widget.account.id;
+    final bytes = await DownloadDirStore.dirSizeBytes(
+      widget.account.id,
+      account: widget.account,
+    );
+    if (!mounted || widget.account.id != accountId) {
+      return;
     }
+    setState(() => _usageBytes = bytes);
   }
 
   String get _usageLabel {
@@ -185,7 +193,8 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _editDownloadDir() async {
     final account = widget.account;
     final current =
-        _downloadDir ?? await DownloadDirStore.currentDirFor(account.id);
+        _downloadDir ??
+        await DownloadDirStore.currentDirFor(account.id, account: account);
     // 默认目录优先使用显示名称（未填写时才是账户 ID）。
     final defaultDir = await DownloadDirStore.defaultDirForAccount(account);
     if (!mounted) {
@@ -225,7 +234,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             dialogTitle: '选择下载目录',
                           );
                       // 选择器期间对话框可能已被关闭，controller 随之释放
-                      if (!mounted) {
+                      if (!mounted || !dialogContext.mounted) {
                         return;
                       }
                       if (selected != null && selected.isNotEmpty) {

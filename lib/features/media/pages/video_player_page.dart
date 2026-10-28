@@ -131,6 +131,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         ),
       );
       _log('media opened start=$startPosition');
+      // 打开过程中可能已被 pop：此时不要再起定时器（会泄漏并反复写旧进度）。
+      if (!mounted) {
+        return;
+      }
       _startPositionTimer();
       _scheduleControlsHide();
     } catch (error, stackTrace) {
@@ -358,6 +362,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   }
 
   void _startPositionTimer() {
+    if (!mounted) {
+      return;
+    }
     _savePositionTimer?.cancel();
     _savePositionTimer = Timer.periodic(
       _savePositionInterval,

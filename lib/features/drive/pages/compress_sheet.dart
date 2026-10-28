@@ -46,7 +46,8 @@ Future<CompressOutcome?> showCompressSheet({
   return showModalBottomSheet<CompressOutcome>(
     context: context,
     isScrollControlled: true,
-    showDragHandle: true,
+    // 提交中不能被拖拽/点遮罩关掉，否则结果会被丢弃（服务端其实已经建了包）。
+    enableDrag: false,
     backgroundColor: AppColors.surface,
     builder: (_) => _CompressSheet(
       api: api,
@@ -92,6 +93,9 @@ class _CompressSheetState extends State<_CompressSheet> {
   String? _nameError;
   String? _submitError;
 
+  /// 能力探测的请求序号：连续切换目录时只认最后一次的结果。
+  int _capabilitySeq = 0;
+
   @override
   void initState() {
     super.initState();
@@ -105,6 +109,7 @@ class _CompressSheetState extends State<_CompressSheet> {
   }
 
   Future<void> _loadCapability() async {
+    final requestId = ++_capabilitySeq;
     if (!_loadingCapability) {
       setState(() {
         _loadingCapability = true;
@@ -117,7 +122,8 @@ class _CompressSheetState extends State<_CompressSheet> {
     } catch (error) {
       failure = error.toString();
     }
-    if (!mounted) {
+    // 已有更新的探测在途 / 弹层已关闭：丢弃这次结果，避免串目录。
+    if (!mounted || requestId != _capabilitySeq) {
       return;
     }
     setState(() {
@@ -248,39 +254,43 @@ class _CompressSheetState extends State<_CompressSheet> {
     final supported = capability == null || capability.supported;
     final canSubmit = supported && !_submitting && !_loadingCapability;
 
-    return Padding(
-      padding: EdgeInsets.only(
-        left: AppSpacing.page,
-        right: AppSpacing.page,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + AppSpacing.page,
-      ),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.86,
+    return PopScope(
+      // 提交中禁止返回/点遮罩关闭：一旦关掉，服务端已接受的压缩结果就丢了。
+      canPop: !_submitting,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: AppSpacing.page,
+          right: AppSpacing.page,
+          bottom: MediaQuery.viewInsetsOf(context).bottom + AppSpacing.page,
         ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildHeader(),
-              _buildSourceCard(),
-              const SizedBox(height: 16),
-              _buildNameField(),
-              const SizedBox(height: 12),
-              _buildLocationField(),
-              const SizedBox(height: 14),
-              _buildHint(),
-              if (_submitError != null) ...[
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.86,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildHeader(),
+                _buildSourceCard(),
+                const SizedBox(height: 16),
+                _buildNameField(),
                 const SizedBox(height: 12),
-                _buildErrorText(_submitError!),
+                _buildLocationField(),
+                const SizedBox(height: 14),
+                _buildHint(),
+                if (_submitError != null) ...[
+                  const SizedBox(height: 12),
+                  _buildErrorText(_submitError!),
+                ],
+                const SizedBox(height: 20),
+                _buildPrimaryButton(canSubmit),
+                const SizedBox(height: 10),
+                _buildCancelButton(),
+                const SizedBox(height: 4),
               ],
-              const SizedBox(height: 20),
-              _buildPrimaryButton(canSubmit),
-              const SizedBox(height: 10),
-              _buildCancelButton(),
-              const SizedBox(height: 4),
-            ],
+            ),
           ),
         ),
       ),

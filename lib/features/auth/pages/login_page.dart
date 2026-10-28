@@ -106,7 +106,13 @@ class _LoginPageState extends State<LoginPage> {
             ? ImageFormatGroup.yuv420
             : null,
       );
-      await controller.initialize();
+      try {
+        await controller.initialize();
+      } catch (_) {
+        // 初始化失败必须释放，否则相机句柄被一直占着，重试也开不起来。
+        await controller.dispose();
+        rethrow;
+      }
 
       if (!mounted) {
         await controller.dispose();

@@ -322,8 +322,12 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     final base = _path;
     setState(() => _batchBusy = true);
     try {
-      final localDir = await DownloadDirStore.resolveFor(widget.account.id);
+      final localDir = await DownloadDirStore.resolveFor(
+        widget.account.id,
+        account: widget.account,
+      );
       final files = <String>[];
+      _skippedDirCount = 0;
       for (final entry in selected) {
         if (entry.isDir) {
           files.addAll(await _collectFiles(base, <String>[entry.name]));
@@ -332,11 +336,11 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
         }
       }
       final folderCount = selected.where((entry) => entry.isDir).length;
-      _skippedDirCount = 0;
+      final skipped = _skippedDirCount;
       if (!mounted) {
         return;
       }
-      if (files.isEmpty && _skippedDirCount > 0) {
+      if (files.isEmpty && skipped > 0) {
         _showMessage('选中的文件夹读取失败，请检查权限后重试');
         return;
       }
@@ -378,7 +382,8 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       _exitSelection();
       _showMessage(
         '已加入 ${files.length} 个下载任务'
-        '${folderCount > 0 ? '（含 $folderCount 个文件夹的内容）' : ''}',
+        '${folderCount > 0 ? '（含 $folderCount 个文件夹的内容）' : ''}'
+        '${skipped > 0 ? '，$skipped 个子目录读取失败已跳过' : ''}',
       );
     } catch (error) {
       if (mounted) {
@@ -772,7 +777,8 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     }
     final trimmed = path.replaceAll(RegExp(r'/+$'), '');
     final index = trimmed.lastIndexOf('/');
-    return index <= 0 ? trimmed : trimmed.substring(index + 1);
+    final name = index < 0 ? trimmed : trimmed.substring(index + 1);
+    return name.isEmpty ? trimmed : name;
   }
 
   /// 顶部提示条：浮在搜索框那一行，不遮挡列表与底部导航。
@@ -1013,7 +1019,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       return;
     }
     try {
-      final dir = await DownloadDirStore.resolveFor(widget.account.id);
+      final dir = await DownloadDirStore.resolveFor(widget.account.id, account: widget.account);
       final output = File('${dir.path}/${entry.name}');
       widget.taskController.startDownload(
         api: widget.api,
@@ -1438,6 +1444,10 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                     summary: summary,
                     visibleCount: visibleEntries.length,
                     hasSearch: hasSearch,
+                    // 接口固定取第一页 200 条：取满即提示可能还有更多。
+                    truncated: !loading &&
+                        !snapshot.hasError &&
+                        entries.length >= 200,
                     statusText: loading
                         ? '加载中'
                         : snapshot.hasError
@@ -1893,6 +1903,7 @@ class _Toolbar extends StatelessWidget {
     required this.summary,
     required this.visibleCount,
     required this.hasSearch,
+    required this.truncated,
     required this.statusText,
     required this.formatSize,
     required this.formatMtime,
@@ -1922,6 +1933,9 @@ class _Toolbar extends StatelessWidget {
   final _DirectorySummary summary;
   final int visibleCount;
   final bool hasSearch;
+
+  /// 目录条目取满一页（200 条）时置位：提示可能还有未展示的条目。
+  final bool truncated;
   final String? statusText;
   final String Function(int) formatSize;
   final String Function(int) formatMtime;
@@ -2081,6 +2095,7 @@ class _Toolbar extends StatelessWidget {
                   summary: summary,
                   visibleCount: visibleCount,
                   hasSearch: hasSearch,
+                  truncated: truncated,
                   statusText: statusText,
                   formatSize: formatSize,
                   formatMtime: formatMtime,
@@ -2316,6 +2331,7 @@ class _HeaderMeta extends StatelessWidget {
     required this.summary,
     required this.visibleCount,
     required this.hasSearch,
+    required this.truncated,
     required this.statusText,
     required this.formatSize,
     required this.formatMtime,
@@ -2327,6 +2343,7 @@ class _HeaderMeta extends StatelessWidget {
   final _DirectorySummary summary;
   final int visibleCount;
   final bool hasSearch;
+  final bool truncated;
   final String? statusText;
   final String Function(int) formatSize;
   final String Function(int) formatMtime;
@@ -2340,13 +2357,17 @@ class _HeaderMeta extends StatelessWidget {
         ? '全部文件'
         : path.split('/').where((item) => item.isNotEmpty).last;
     final totalCount = summary.folderCount + summary.fileCount;
-    final detailText =
+    final baseDetail =
         statusText ??
         (hasSearch
             ? '匹配 $visibleCount 项 · 共 $totalCount 项'
             : summary.latestMtime > 0
             ? '${summary.folderCount} 个文件夹 · ${summary.fileCount} 个文件 · ${formatSize(summary.totalSize)} · 更新 ${formatMtime(summary.latestMtime)}'
             : '${summary.folderCount} 个文件夹 · ${summary.fileCount} 个文件 · ${formatSize(summary.totalSize)}');
+    // 接口只取第一页：取满 200 条时明确告知，避免用户以为目录里就这么多。
+    final detailText = statusText == null && truncated && !hasSearch
+        ? '$baseDetail · 仅显示前 200 项'
+        : baseDetail;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
