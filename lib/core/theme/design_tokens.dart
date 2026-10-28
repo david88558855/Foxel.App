@@ -124,6 +124,22 @@ class AppFonts {
         defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.linux;
   }
+
+  /// 把字体栈叠到一个具体样式上。
+  ///
+  /// `DefaultTextStyle` 是「替换」而不是「合并」语义：主题里凡是显式给了
+  /// TextStyle 的位置（AppBar 标题、对话框、SnackBar、ListTile、输入框、
+  /// 按钮、底部导航），样式里不带 family 就会掉回引擎默认的 Roboto，
+  /// 汉字随之变成宋体 —— 这正是「有的地方字体没改过来」的原因。
+  static TextStyle apply(TextStyle style) {
+    if (!useDesktopFont) {
+      return style;
+    }
+    return style.copyWith(
+      fontFamily: desktopFamily,
+      fontFamilyFallback: desktopFallback,
+    );
+  }
 }
 
 /// 字号与字重规范。

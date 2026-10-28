@@ -44,13 +44,15 @@ class FoxelDriveApp extends StatelessWidget {
         elevation: 0,
         centerTitle: false,
         iconTheme: const IconThemeData(color: AppColors.ink, size: 22),
-        titleTextStyle: AppText.pageTitle.copyWith(fontSize: 17),
+        titleTextStyle: AppFonts.apply(
+          AppText.pageTitle.copyWith(fontSize: 17),
+        ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
-          textStyle: AppText.button,
+          textStyle: AppFonts.apply(AppText.button),
           padding: buttonPadding,
           shape: buttonShape,
         ),
@@ -58,7 +60,7 @@ class FoxelDriveApp extends StatelessWidget {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.ink,
-          textStyle: AppText.button,
+          textStyle: AppFonts.apply(AppText.button),
           padding: buttonPadding,
           side: const BorderSide(color: AppColors.border),
           shape: buttonShape,
@@ -67,9 +69,8 @@ class FoxelDriveApp extends StatelessWidget {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppColors.primary,
-          textStyle: const TextStyle(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w800,
+          textStyle: AppFonts.apply(
+            const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadii.field),
@@ -83,8 +84,8 @@ class FoxelDriveApp extends StatelessWidget {
           horizontal: AppSpacing.lg,
           vertical: AppSpacing.lg,
         ),
-        hintStyle: AppText.itemSubtitle,
-        labelStyle: AppText.fieldLabel,
+        hintStyle: AppFonts.apply(AppText.itemSubtitle),
+        labelStyle: AppFonts.apply(AppText.fieldLabel),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadii.field),
           borderSide: const BorderSide(color: AppColors.border),
@@ -108,32 +109,34 @@ class FoxelDriveApp extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
         ),
-        titleTextStyle: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w800,
-          color: AppColors.ink,
+        titleTextStyle: AppFonts.apply(
+          const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: AppColors.ink,
+          ),
         ),
-        contentTextStyle: const TextStyle(
-          fontSize: 13,
-          color: AppColors.ink2,
-          height: 1.6,
+        contentTextStyle: AppFonts.apply(
+          const TextStyle(fontSize: 13, color: AppColors.ink2, height: 1.6),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: AppColors.ink,
-        contentTextStyle: const TextStyle(
-          fontSize: 12.8,
-          fontWeight: FontWeight.w700,
-          color: Colors.white,
+        contentTextStyle: AppFonts.apply(
+          const TextStyle(
+            fontSize: 12.8,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadii.field),
         ),
       ),
-      listTileTheme: const ListTileThemeData(
-        titleTextStyle: AppText.itemTitle,
-        subtitleTextStyle: AppText.itemSubtitle,
+      listTileTheme: ListTileThemeData(
+        titleTextStyle: AppFonts.apply(AppText.itemTitle),
+        subtitleTextStyle: AppFonts.apply(AppText.itemSubtitle),
         iconColor: AppColors.ink2,
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(

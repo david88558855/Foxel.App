@@ -350,12 +350,16 @@ class _FloatingNavButton extends StatelessWidget {
                 AnimatedDefaultTextStyle(
                   duration: const Duration(milliseconds: 220),
                   curve: Curves.easeOutCubic,
-                  style: TextStyle(
-                    color: selected ? activeColor : inactiveColor,
-                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                    fontSize: 10.5,
-                    letterSpacing: 0,
-                    height: 1,
+                  // AnimatedDefaultTextStyle 会替换外层样式，必须显式带上字体栈，
+                  // 否则导航标签会掉回引擎默认字体（汉字变宋体）。
+                  style: AppFonts.apply(
+                    TextStyle(
+                      color: selected ? activeColor : inactiveColor,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                      fontSize: 10.5,
+                      letterSpacing: 0,
+                      height: 1,
+                    ),
                   ),
                   child: Text(
                     item.label,
