@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 /// 全局设计令牌。
@@ -88,6 +89,41 @@ class AppSpacing {
   static const double xl = 16;
   static const double card = 16;
   static const double navBottom = 126;
+}
+
+/// 字体规范。
+///
+/// 桌面端（Windows / macOS / Linux）统一使用 Arial：Flutter 默认的 Roboto
+/// 在桌面上没有中文字形，汉字会落到宋体一类的衬线兜底字体上，小字号发虚。
+/// 中文优先取与 Arial 比例最接近的 UI 黑体：微软雅黑 / 苹方 / Noto Sans CJK。
+/// 移动端不做干预（iOS 用苹方、Android 用系统无衬线体）。
+class AppFonts {
+  const AppFonts._();
+
+  /// 桌面端拉丁字体。
+  static const String desktopFamily = 'Arial';
+
+  /// Arial 缺失时的中文与兜底顺序，按平台可用性排列。
+  static const List<String> desktopFallback = <String>[
+    'Microsoft YaHei UI',
+    'Microsoft YaHei',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Noto Sans CJK SC',
+    'Noto Sans SC',
+    'WenQuanYi Micro Hei',
+    'sans-serif',
+  ];
+
+  /// 是否启用桌面字体栈。
+  static bool get useDesktopFont {
+    if (kIsWeb) {
+      return false;
+    }
+    return defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux;
+  }
 }
 
 /// 字号与字重规范。

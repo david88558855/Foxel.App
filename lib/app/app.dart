@@ -32,6 +32,11 @@ class FoxelDriveApp extends StatelessWidget {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
+      // 桌面端统一 Arial + 中文近似黑体，移动端沿用系统字体。
+      fontFamily: AppFonts.useDesktopFont ? AppFonts.desktopFamily : null,
+      fontFamilyFallback: AppFonts.useDesktopFont
+          ? AppFonts.desktopFallback
+          : null,
       scaffoldBackgroundColor: AppColors.background,
       appBarTheme: AppBarTheme(
         backgroundColor: AppColors.background,
@@ -152,6 +157,21 @@ class FoxelDriveApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Foxel',
       theme: buildTheme(),
+      // 主题只覆盖到 Material 体系内的文本；这里再兜一层，
+      // 让不在 Material 下的 Text 也拿到桌面字体栈。
+      builder: (context, child) {
+        final content = child ?? const SizedBox.shrink();
+        if (!AppFonts.useDesktopFont) {
+          return content;
+        }
+        return DefaultTextStyle.merge(
+          style: const TextStyle(
+            fontFamily: AppFonts.desktopFamily,
+            fontFamilyFallback: AppFonts.desktopFallback,
+          ),
+          child: content,
+        );
+      },
       home: const AppRoot(),
     );
   }
