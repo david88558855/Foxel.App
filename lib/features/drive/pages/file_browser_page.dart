@@ -82,6 +82,16 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   /// 当前目录的完整条目（含被搜索隐藏的），用于重命名冲突检测。
   List<FileEntry> _allEntries = const <FileEntry>[];
 
+  // ---- 顶部提示条（浮在搜索框位置，替代压在底部导航上的黑色 SnackBar）----
+  static const Duration _toastDuration = Duration(milliseconds: 2400);
+
+  String _toastText = '';
+  String? _toastActionLabel;
+  VoidCallback? _toastAction;
+  _ToastTone _toastTone = _ToastTone.info;
+  bool _toastVisible = false;
+  Timer? _toastTimer;
+
   @override
   void initState() {
     super.initState();
@@ -91,6 +101,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
 
   @override
   void dispose() {
+    _toastTimer?.cancel();
     _saveCurrentScrollOffset();
     unawaited(_saveBrowseState());
     _scrollController.dispose();
@@ -371,7 +382,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       );
     } catch (error) {
       if (mounted) {
-        _showMessage(error.toString());
+        _showMessage(error.toString(), isError: true);
       }
     } finally {
       if (mounted) {
@@ -710,19 +721,12 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       _selectedPaths.clear();
     });
     _refresh();
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          outcome.queued
-              ? '已加入服务端任务队列，可在「任务」中查看进度'
-              : '已创建 ${outcome.name}',
-        ),
-        action: outcome.queued
-            ? SnackBarAction(label: '查看', onPressed: widget.onOpenTasks)
-            : null,
-      ),
+    _showToast(
+      outcome.queued
+          ? '已加入服务端任务队列，可在「任务」中查看进度'
+          : '已创建 ${outcome.name}',
+      actionLabel: outcome.queued ? '查看' : null,
+      action: outcome.queued ? widget.onOpenTasks : null,
     );
   }
 
@@ -756,10 +760,49 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     return index <= 0 ? trimmed : trimmed.substring(index + 1);
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+  /// 顶部提示条：浮在搜索框那一行，不遮挡列表与底部导航。
+  void _showToast(
+    String message, {
+    String? actionLabel,
+    VoidCallback? action,
+    bool isError = false,
+  }) {
+    if (!mounted) {
+      return;
+    }
+    _toastTimer?.cancel();
+    // 多选态没有搜索框位置可占，退回系统 SnackBar，保证提示不丢。
+    if (_selecting) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+      return;
+    }
+    setState(() {
+      _toastText = message;
+      _toastActionLabel = actionLabel;
+      _toastAction = action;
+      _toastTone = isError ? _ToastTone.error : _ToastTone.info;
+      _toastVisible = true;
+    });
+    _toastTimer = Timer(_toastDuration, () {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _toastVisible = false);
+    });
+  }
+
+  void _hideToast() {
+    _toastTimer?.cancel();
+    if (!_toastVisible) {
+      return;
+    }
+    setState(() => _toastVisible = false);
+  }
+
+  void _showMessage(String message, {bool isError = false}) {
+    _showToast(message, isError: isError);
   }
 
   Future<void> _runAction(Future<void> Function() action) async {
@@ -772,7 +815,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       _refresh();
     } catch (error) {
       if (mounted) {
-        _showMessage(error.toString());
+        _showMessage(error.toString(), isError: true);
       }
     }
   }
@@ -848,7 +891,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       widget.onOpenTasks();
     } catch (error) {
       if (mounted) {
-        _showMessage('选择文件失败：$error');
+        _showMessage('选择文件失败：$error', isError: true);
       }
     }
   }
@@ -1004,7 +1047,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
         }
         return;
       }
-      _showMessage('无法写入下载目录：$error');
+      _showMessage('无法写入下载目录：$error', isError: true);
     }
   }
 
@@ -1364,6 +1407,14 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                   _Toolbar(
                     controller: _searchController,
                     query: _searchQuery,
+                    toast: _TopToast(
+                      text: _toastText,
+                      actionLabel: _toastActionLabel,
+                      onAction: _toastAction,
+                      tone: _toastTone,
+                      visible: _toastVisible,
+                      onDismiss: _hideToast,
+                    ),
                     sortLabel: _sortLabel,
                     sortAscending: _sortAscending,
                     sortField: _sortField,
@@ -1812,6 +1863,7 @@ class _Toolbar extends StatelessWidget {
   const _Toolbar({
     required this.controller,
     required this.query,
+    required this.toast,
     required this.sortLabel,
     required this.sortAscending,
     required this.sortField,
@@ -1838,6 +1890,9 @@ class _Toolbar extends StatelessWidget {
 
   final TextEditingController controller;
   final String query;
+
+  /// 顶部提示条：与搜索框共用同一格（浮在上面，不挤动布局）。
+  final Widget toast;
   final String sortLabel;
   final bool sortAscending;
   final _SortField sortField;
@@ -1997,7 +2052,14 @@ class _Toolbar extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                search,
+                Stack(
+                  // 提示条铺满搜索框这一格：只做覆盖，不改布局尺寸。
+                  fit: StackFit.passthrough,
+                  children: [
+                    search,
+                    Positioned.fill(child: toast),
+                  ],
+                ),
                 const SizedBox(height: 8),
                 _HeaderMeta(
                   path: path,
@@ -2014,6 +2076,146 @@ class _Toolbar extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+enum _ToastTone { info, error }
+
+/// 顶部提示条（B 方案：主色浅底）。
+///
+/// 与搜索框共用同一格，用 Stack 铺在上面覆盖搜索框；显示/隐藏只做位移与
+/// 透明度动画，不改变布局尺寸，因此列表不会跳动。
+class _TopToast extends StatelessWidget {
+  const _TopToast({
+    required this.text,
+    required this.tone,
+    required this.visible,
+    required this.onDismiss,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final String text;
+  final _ToastTone tone;
+  final bool visible;
+  final VoidCallback onDismiss;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final info = tone == _ToastTone.info;
+    final background = info
+        ? const Color(0xFFEAF0FF)
+        : const Color(0xFFFDECEC);
+    final borderColor = info
+        ? const Color(0xFFD3DFFF)
+        : const Color(0xFFF7C9C9);
+    final textColor = info
+        ? const Color(0xFF1B3A78)
+        : const Color(0xFF7A1F1F);
+    final accent = info ? const Color(0xFF3C5BE0) : AppColors.danger;
+    final iconColor = info ? AppColors.primary : AppColors.danger;
+    final shadowColor = info
+        ? const Color(0x1A4C6FFF)
+        : const Color(0x1AE5484D);
+
+    return IgnorePointer(
+      ignoring: !visible,
+      child: AnimatedSlide(
+        duration: const Duration(milliseconds: 190),
+        curve: Curves.easeOutCubic,
+        offset: visible ? Offset.zero : const Offset(0, -0.5),
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 170),
+          opacity: visible ? 1 : 0,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onDismiss,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9),
+              decoration: BoxDecoration(
+                color: background,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: borderColor),
+                boxShadow: [
+                  BoxShadow(
+                    color: shadowColor,
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 22,
+                    height: 22,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      info
+                          ? Icons.check_rounded
+                          : Icons.priority_high_rounded,
+                      size: 13,
+                      color: iconColor,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      text,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12.6,
+                        fontWeight: FontWeight.w700,
+                        color: textColor,
+                      ),
+                    ),
+                  ),
+                  if (actionLabel != null) ...[
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () {
+                        onDismiss();
+                        onAction?.call();
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 2,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              actionLabel!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: accent,
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              size: 14,
+                              color: accent,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
